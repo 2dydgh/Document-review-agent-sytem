@@ -1,0 +1,110 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# 환경변수·비밀정보
+.env
+*.pem
+*.key
+*.local.json
+
+# IDE
+.idea/
+.vscode/
+
+# AI 도구의 로컬 스킬·작업 상태 — 세션 기록·메모·태스크 브리프·설치한
+# 개인용 스킬이 쌓인다. 사람마다 다르고 앱 실행과 무관해서 커밋하지 않는다.
+# `**/.omc/` 는 루트뿐 아니라 web/·web/tests/ 아래 생긴 상태도 함께 막는다.
+# (CLAUDE.md 와 팀 공용 .claude/settings.json 은 공유 대상이라 여기 넣지 않는다.)
+**/.omc/
+/.superpowers/
+/.agents/
+/.claude/skills/
+# git worktree 는 그 자체가 저장소다. 커밋되면 clone 한 곳에서 빈 디렉터리가
+# 되고 "임베디드 저장소" 경고가 난다 — 실제로 한 번 딸려 들어갔다(2026-08-20).
+/.claude/worktrees/
+/skills-lock.json
+
+# 빌드 산출물
+build/
+dist/
+# web/ 은 빌드 도구 없이 serve 가 그대로 얹는 바닐라 JS 라 npm 을 쓸 일이 없다
+# (CLAUDE.md 기술 스택). 그래도 막아 두는 이유: 한 번 npm install 이 돌면
+# node_modules 가 수십 MB 로 불어나는데, 그때 `git add -A` 한 번이면 통째로
+# 들어간다. 되돌리려면 이력을 다시 써야 한다 — 들어오기 전에 막는 편이 싸다.
+node_modules/
+
+# 테스트·캐시
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.log
+
+# OS·오피스 임시파일
+.DS_Store
+Thumbs.db
+Desktop.ini
+~$*
+*.tmp
+
+# 프로젝트 문서 및 데이터
+# 검토 대상 문서. 고객 문서가 저장소에 들어가지 않게 통째로 뺀다.
+#
+# **앞의 슬래시가 중요하다.** `data/` 로 쓰면 어느 깊이의 data 폴더든 걸려
+# `tests/data/probe.pdf`(시험용 PDF)까지 무시되고, clone 한 곳에서 그 파일을 읽는
+# 시험이 FileNotFoundError 로 죽는다. 파일은 있는데 커밋만 안 되니 여기서는 멀쩡해
+# 보인다 — 실제로 한 번 그렇게 나갔다.
+/data/
+
+# 확장자로도 한 겹 막는다. `/data/` 밖에 고객 문서를 떨궈두고 `git add -A` 하는
+# 사고가 실제 위험이라, 문서를 의도적으로 두는 두 곳만 예외로 연다.
+#
+# 주의: 이미 추적 중인 파일은 여기 걸려도 빠지지 않는다 — `tests/data/probe.pdf`
+# 는 이미 커밋돼 있어서 그대로 남는다. 아래 예외는 안전장치가 아니라 의도 표시다.
+#
+# 이 규칙은 가공 문서와 실무 원본을 구분하지 못한다. `golden/` 을 열어둔 이상
+# 거기 실무 원본을 넣으면 그대로 커밋된다 — 그건 리뷰가 막아야 한다.
+*.pdf
+*.hwp
+*.hwpx
+*.docx
+*.xlsx
+*.csv
+!tests/data/**
+!golden/**
+
+# 검토 이력(서버가 저장하는 결과 JSON). 문서 내용이 들어 있다.
+/.docreview/
+
+# UI 생성물
+# `docsuree compare|review --emit-ui` 가 만드는 생성물
+web/docreview-result.js
+web/docreview-review-result.js
+
+# 개발 과정 기록 — 설계 노트·계획·미결 사항. 저장소에 남기는 것은 코드와 팀이
+# 공유하는 지침(CLAUDE.md·각 모듈 README)이고, 개발하며 쌓인 논의는 로컬에 둔다.
+#
+# **앞의 슬래시가 있어야 한다.** `docs/` 로 쓰면 어느 깊이의 docs 폴더든 걸려서
+# 모듈이 자기 문서를 두는 자리까지 막힌다.
+/docs/
+
+# 로고·마스코트 시안 보관소와 디자인 문서. 앱이 참조하지 않는다 — 화면이 쓰는
+# 아이콘은 web/public/ 에 따로 있다.
+web/brand/
+web/DESIGN.md
+
+# doc_parser 모듈 런타임 생성물(더미 테스트셋/파싱 결과) — 재생성 가능
+src/modules/doc_parser/testset/
+src/modules/doc_parser/out/
+env_report.json
+
+# 로컬 작업 폴더. `/docs/` 와 같은 이유로 앞의 슬래시가 있어야 한다 —
+# 슬래시 없이 `doc/` 로 쓰면 어느 깊이의 doc 폴더든 걸린다.
+# local(작업용)/ 에는 GPU 빌드용 pyproject 사본이 들어 있다(pyproject.toml 주석 참조).
+/doc/
+/docsuree-icons/
+/local(작업용)/

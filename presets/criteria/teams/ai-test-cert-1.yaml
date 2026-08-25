@@ -1,0 +1,1196 @@
+# AI시험인증1팀 검토 기준
+#
+# ── 어디서 왔나 ──────────────────────────────────────────────────────
+# **팀이 정리해 준 md 2건** (data/AX안전신뢰실/AI시험인증팀/):
+#   _요구사항_단일문서.md   문서 하나만 보고 판정 — 체크 93줄
+#   _요구사항_문서 간.md    문서 2개를 대조 — 18쌍 · 87항목
+#
+# 기준의 출처가 **문서 밖**이다. 문서를 열어보고 거꾸로 뽑은 값이 아니라 팀이
+# 관리하는 규정에서 온다. 그래서 문서와 규정이 어긋나면 지적이 나온다 — 옛
+# presets/checklists/acmd.yaml 이 문서에서 뽑은 정규식으로 그 문서를 재서 순환에
+# 빠진 것과 반대다(presets/README.md).
+#
+# 요구사항 xlsx 에서 오던 13건은 정리했다(2026-08-20). 그 시트는 팀이 **도구에
+# 요구한 기능** 이라 문서를 재는 잣대가 아닌 것이 섞여 있었다(생성 계열 6건 등).
+# 남긴 것은 실제로 도는 하나뿐이다 — `칸값-1`(source: 문서검증 No.12).
+# 오탈자(No.15)·단어 통일(No.23)은 **공통 C1·C4** 로 올라갔다.
+#
+# 범위는 `variant: 일반` 이다. 공인(KOLAS)·영문은 양식번호와 문구가 달라 별도 파일이 든다.
+#
+# ── 번호와 묶음 ──────────────────────────────────────────────────────
+# 번호는 **화면에 그대로 보이는 값**이라 읽히게 짓는다. 앞머리가 곧 묶음이다:
+#
+#   서식 · 표기 · 맞춤법·문장 · 시험 환경 기재     md §1 (전 문서 공통)
+#   검토기록서 · 의뢰서 · 계획서 · 현장 · 설계서
+#   기록서 · 을지 · 갑지                          md §2 (산출물별)
+#
+# md 의 절 번호(§2 의 1-1, 3-2, 4-3 …)를 그대로 쓰지 않았다. md 안에서도 3-2 가
+# 3-1 앞에, 4-3 이 4-2 앞에 있어 화면이 뒤죽박죽으로 보인다. 되짚을 근거는
+# 항목마다 `source` 에 남겼다.
+#
+# ── 어느 절이 무슨 일을 하나 ────────────────────────────────────────
+#   items                          문서 1건 검토 (orchestrator.py)
+#   outputs·inputs·ignore
+#   page_count_source·case_wide
+#   pairs·manual                   산출물 폴더 검토 (case.py)
+#
+# **한 검토에서 둘 다 돈다.** 그래서 items 에 outputs 가 이미 보는 것을 또 적으면
+# 같은 결함이 두 번 지적된다.
+#
+# ── 산출물을 가려서 건다 ────────────────────────────────────────────
+# 산출물별 항목은 `applies_to` 로 대상 문서를 못박는다. 없으면 "갑지의 비고문구"
+# 같은 기준이 시험의뢰서 검토에도 떴다 — 실측: 시험의뢰서 검토에서 21건이 빠진다.
+#
+# ── 아직 사람 몫인 것이 많다 ────────────────────────────────────────
+# 48건 중 41건이 `사람` 이다. 검사기가 없어서지 사람이 봐야 해서가 아닌 것이
+# 섞여 있다 — 날짜·단위·기호 표기처럼 정규식 하나면 되는 것이 9건이다
+# (표기-2·4·5·6·8·9 · 환경-3·4 · 기록서-1). 그 검사기를 만들면 한꺼번에 넘어간다.
+# 글꼴·정렬·머리말·페이지 수는 파서가 그 정보를 안 실어 지금은 손댈 수 없다.
+#
+# 라벨(labels)은 후보 목록이다. 같은 필드의 라벨이 문서마다 다르다(실측):
+#     시험의뢰서·동의서 "의뢰번호 :"      제출물 확인증 "의뢰 번호:"
+# 공백을 무시해 맞추되 **셀 전체가 같아야** 한다. 부분일치는 위험하다 — 갑지에는
+# `주소 :`(슈어 주소)와 `주소`(의뢰기관 주소)가 둘 다 있어 엉뚱한 값을 잡는다.
+#
+#     at: right   라벨 셀의 오른쪽 칸이 값 (갑지처럼 세로 표)
+#     at: below   라벨 셀의 아래 칸이 값 (을지 머리표처럼 가로 표)
+#
+# signatures 는 서명이 들어갈 자리다. placeholder 가 그대로 남아 있으면 미작성이다 —
+# 실측: 샘플 갑지가 `성명                          (서명)` 그대로였다.
+
+# ── 공통으로 올라간 항목 (2026-08-20) ────────────────────────────────
+#   No.15 문서 내용 검토(띄어쓰기·문법·오탈자) → 공통 C1
+#   No.23 문서 단어 통일성 검토(정확도/정확성)  → 공통 C4
+#
+# **공통 C1·C4 의 근거가 바로 이 두 항목의 본문**이다 — 두 실이 같은 것을
+# 요구했다는 증거로 인용했다. 남겨두면 같은 지적이 기준 둘에 붙는다.
+# 원문은 요구사항 xlsx "문서 검증 요구사항" 시트 No.15·23 에 있다.
+name: AI시험인증1팀
+team: AI시험인증1팀
+source_filename: DocSuree_요구사항_정리.xlsx
+variant: 일반
+outputs:
+- key: 시험의뢰 검토기록서
+  form_no: SST-K-TP-7-01-01(02)
+  folder: 00.시험의뢰서 및 제출물 확인증
+  # 실측: 의뢰번호가 이 문서에 없다(접수번호만). W-의뢰번호에서 뺀 이유다.
+  fields:
+  - name: 접수번호
+    from: table
+    labels:
+    - 접수번호
+    at: right
+    pattern: RN-\d{2}-\d{3}
+    required: true
+  - name: 접수일
+    from: table
+    labels:
+    - 접수일
+    at: right
+    format: date
+    required: true
+  - name: 의뢰기관명
+    from: table
+    labels:
+    - 의뢰기관 명
+    at: right
+    required: true
+  signatures:
+  - role: 시험실무자
+    placeholder: 성명
+- key: 시험의뢰서
+  form_no: SST-K-TP-7-01-02(08)
+  folder: 00.시험의뢰서 및 제출물 확인증
+  fields:
+  - name: 접수번호
+    from: table
+    labels:
+    - 접수번호
+    at: right
+    pattern: RN-\d{2}-\d{3}
+    required: true
+  - name: 접수일
+    from: table
+    labels:
+    - 접수일
+    at: right
+    format: date
+    required: true
+  - name: 의뢰번호
+    from: table
+    labels:
+    - 의뢰번호
+    at: right
+    pattern: SST-\d{2}-\d{3}
+    required: true
+  - name: 의뢰기관명
+    from: table
+    labels:
+    - 기관명
+    at: right
+    required: true
+  - name: 대표자
+    from: table
+    labels:
+    - 대표자
+    at: right
+    required: true
+  - name: 의뢰기관주소
+    from: table
+    labels:
+    - 주소
+    at: right
+    required: true
+  - name: 제품명
+    from: table
+    labels:
+    - 제품명
+    at: right
+    required: true
+  - name: 성적서용도
+    from: table
+    labels:
+    - 성적서 용도
+    at: right
+    required: true
+- key: 시험동의서
+  form_no: SST-K-TP-7-01-07(00)
+  folder: 00.시험의뢰서 및 제출물 확인증
+  fields:
+  - name: 의뢰번호
+    from: table
+    labels:
+    - 의뢰번호
+    at: right
+    pattern: SST-\d{2}-\d{3}
+    required: true
+- key: 제출물 확인증
+  form_no: SST-K-TP-7-04-01(02)
+  folder: 00.시험의뢰서 및 제출물 확인증
+  # 실측: 의뢰번호가 표에 없고 머릿말에만 있다. 서식 레이어가 없어 못 읽는다 —
+  # 그래서 W-의뢰번호에서 뺐다.
+  #
+  # 제출물 목록은 칸 하나가 아니라 표 전체다(from: table_rows). 실측: 실제 제출물은
+  # 1건인데 빈 행이 20줄 더 있고 표 끝에 `| 비고 |  |` 가 붙는다 — 앞은 key(제출물명)가
+  # 비어서, 뒤는 열 수가 모자라서 걸러진다.
+  fields:
+  - name: 제출물목록
+    from: table_rows
+    columns: [제출물명, 제출물 형태, 부수, 구분, 반환/폐기 날짜, 확인]
+    required_columns: [제출물명, 제출물 형태, 부수, 구분]
+    required: true
+- key: 시험계획서
+  form_no: SST-K-TI-03-01(05)
+  folder: 01.시험계획서
+  # 실측: 머리표가 가로다 — | 의뢰번호 | 시험 실무자 | 기술 책임자 | 아래가 값.
+  fields:
+  - name: 의뢰번호
+    from: table
+    labels:
+    - 의뢰번호
+    at: below
+    pattern: SST-\d{2}-\d{3}
+    required: true
+  - name: 제품명
+    from: table
+    labels:
+    - 시험 대상 품명
+    at: right
+    required: true
+  - name: 버전
+    from: table
+    labels:
+    - 버전
+    at: right
+    required: true
+  - name: 시험기간
+    from: table
+    labels:
+    - 시험 수행 기간
+    at: right
+    format: date_range
+    required: true
+  # 작성일자 — 결재란에 라벨 없이 열 위치로만 있다. 실측(계획서 2026. 01. 02. ·
+  # 설계서 2026. 01. 03.):
+  #     | 의뢰번호    | 시험 실무자        | 기술 책임자       |
+  #     | SST-26-999 |  | 2026. 01. 02. |  | 2026. 01. 02. |
+  # 머리행 3칸 · 값 행 5칸이라 칸 번호로는 못 맞춘다. 빈 칸을 걷어내면 1:1 이다.
+  - name: 작성일자
+    from: table_cell
+    columns: [의뢰번호, 시험 실무자, 기술 책임자]
+    key: 시험 실무자
+  # 문서 간 요구사항 §3은 계획서·설계서·을지·기록서·갑지 5곳의 온도·습도
+  # 일치를 요구한다. 현재 샘플 계획서에는 숫자가 없지만, 필드맵까지 빼면
+  # "문서에서 못 찾음"이 아니라 "검사 설정 없음"이 되므로 기대 칸을 명시한다.
+  - name: 시험환경_온도
+    from: table
+    labels:
+    - 온도
+    at: right
+    required: true
+  - name: 시험환경_습도
+    from: table
+    labels:
+    - 습도
+    at: right
+    required: true
+- key: 시험설계서
+  form_no: SST-K-TI-03-02(05)
+  # 문서 간 md: "테스트케이스 글꼴 크기가 8 pt 또는 9 pt". 표 안에 **직접 박힌**
+  # 크기만 본다 — 실측에서 그게 곧 테스트케이스였다(8pt 139자). 본문은 스타일이
+  # 정하고 그 크기는 아직 못 읽는다.
+  font_sizes: [8, 9]
+  folder: 02.시험설계서
+  fields:
+  - name: 의뢰번호
+    from: table
+    labels:
+    - 의뢰번호
+    at: below
+    pattern: SST-\d{2}-\d{3}
+    required: true
+  - name: 제품명
+    from: table
+    labels:
+    - 시험 대상 품명
+    at: right
+    required: true
+  - name: 버전
+    from: table
+    labels:
+    - 버전
+    at: right
+  # 작성일자 — 결재란에 라벨 없이 열 위치로만 있다. 실측(계획서 2026. 01. 02. ·
+  # 설계서 2026. 01. 03.):
+  #     | 의뢰번호    | 시험 실무자        | 기술 책임자       |
+  #     | SST-26-999 |  | 2026. 01. 02. |  | 2026. 01. 02. |
+  # 머리행 3칸 · 값 행 5칸이라 칸 번호로는 못 맞춘다. 빈 칸을 걷어내면 1:1 이다.
+  - name: 작성일자
+    from: table_cell
+    columns: [의뢰번호, 시험 실무자, 기술 책임자]
+    key: 시험 실무자
+  - name: 시험환경_온도
+    from: table
+    labels:
+    - 온도
+    at: right
+    required: true
+  - name: 시험환경_습도
+    from: table
+    labels:
+    - 습도
+    at: right
+    required: true
+  # 시험합격기준은 넣지 않는다. 설계서는 구체 기준을 문장으로 적고
+  # (`사과 인식률이 95 % 이상이어야 한다. · …`) 갑지는 `의뢰자 제시 기준 (시험 결과
+  # 참조)` 로 적는다 — 표기 방식이 달라 exact 대조가 거짓 지적을 낸다(실측).
+  # 규칙이 문서를 지적하면 문서가 아니라 규칙 해석을 의심한다. 팀 확인 대기.
+- key: 현장시험환경 체크리스트
+  form_no: SST-K-TI-04-01(03)
+  folder: 02.시험설계서
+  fields:
+  - name: 접수번호
+    from: table
+    labels:
+    - 접수 번호
+    at: right
+    pattern: RN-\d{2}-\d{3}
+    required: true
+  - name: 의뢰번호
+    from: table
+    labels:
+    - 의뢰 번호
+    at: right
+    pattern: SST-\d{2}-\d{3}
+    required: true
+  - name: 시험일자
+    from: table
+    labels:
+    - 시험 일자
+    at: right
+    format: date
+    required: true
+- key: 시험기록서
+  form_no: SST-K-TP-7-05-01(04)
+  folder: 03.시험성적서 및 시험자료 기록
+  fields:
+  - name: 접수번호
+    from: table
+    labels:
+    - 접수번호
+    at: right
+    pattern: RN-\d{2}-\d{3}
+    required: true
+  - name: 의뢰번호
+    from: table
+    labels:
+    - 의뢰번호
+    at: right
+    pattern: SST-\d{2}-\d{3}
+    required: true
+  - name: 제품명
+    from: table
+    labels:
+    - 시험 대상 품명 및 버전
+    at: right
+    required: true
+  - name: 시험방법
+    from: table
+    labels:
+    - 적용 시험 방법
+    at: right
+    required: true
+  # 실측: 기록서는 "저장 일자"라 부른다. 체크리스트의 "시험 일자"와 같은 값인지는
+  # 팀 확인 대기(docs/open-questions.md) — 샘플에서는 둘 다 2026. 01. 08. 이다.
+  - name: 시험일자
+    from: table
+    labels:
+    - 저장 일자
+    at: right
+    format: date
+    required: true
+  # 기록서는 온도와 습도가 `시험 환경` 오른쪽 한 칸에 함께 적힌다.
+  - name: 시험환경_온도
+    from: table
+    labels:
+    - 시험 환경
+    at: right
+    capture: '온도\s*:\s*(?P<value>\([^)]*\)\s*°C)'
+    required: true
+  - name: 시험환경_습도
+    from: table
+    labels:
+    - 시험 환경
+    at: right
+    capture: '습도\s*:\s*(?P<value>\([^)]*\)\s*%\s*R\.H\.)'
+    required: true
+- key: 갑지
+  form_no: SST-K-TP-7-08-06(00)
+  folder: 03.시험성적서 및 시험자료 기록
+  fields:
+  - name: 성적서번호
+    from: table
+    labels:
+    - 성적서번호
+    at: right
+    pattern: SST-\d{2}-\d{3}-C\d+
+    required: true
+  - name: 총페이지
+    from: table
+    labels:
+    - 페이지
+    at: right
+    pattern: \( \d+ \) / 총 \( (\d+) \)
+  - name: 의뢰기관명
+    from: table
+    labels:
+    - 기관명
+    at: right
+    required: true
+  - name: 대표자
+    from: table
+    labels:
+    - 대표자
+    at: right
+    required: true
+  - name: 의뢰기관주소
+    from: table
+    labels:
+    - 주소
+    at: right
+    required: true
+  - name: 시험장소
+    from: checkbox_group
+    options:
+    - 고정 시험실
+    - 현장 시험
+    select: one
+  - name: 제품명
+    from: table
+    labels:
+    - 시험 대상 품목
+    at: right
+    required: true
+  - name: 시험기간
+    from: table
+    labels:
+    - 시험 기간
+    at: right
+    format: date_range
+    required: true
+  - name: 시험방법
+    from: table
+    labels:
+    - 시험 방법
+    at: right
+    required: true
+  - name: 시험결과
+    from: table
+    labels:
+    - 시험 결과
+    at: right
+    required: true
+  - name: 시험합격기준
+    from: table
+    labels:
+    - Pass 기준
+    at: right
+    required: true
+  - name: 시험환경_온도
+    from: table
+    labels:
+    - 온도
+    at: right
+    required: true
+  - name: 시험환경_습도
+    from: table
+    labels:
+    - 습도
+    at: right
+    required: true
+  - name: 성적서용도
+    from: table
+    labels:
+    - 성적서 용도
+    at: right
+    required: true
+  fixed_text:
+  - 슈어소프트테크㈜
+  - 031-606-2000
+  - 1. 이 성적서는 시험의뢰인에 의해 제공된 시료에 한정됩니다.
+  - 2. 이 성적서는 홍보, 선전, 광고 및 소송용으로 사용될 수 없으며, 용도 이외의 사용을 금합니다.
+  - 3. 이 성적서의 진위여부는 QR Code로 확인 가능합니다.
+  - 4. * 표시된 시험 결과는 시험기관의 인정범위 밖의 것임을 밝힙니다.
+  # 갑지의 서명란은 가로 표다(실측). at 을 안 주면 시험실무자의 값으로 옆 칸
+  # ('기술책임자')을 읽어 미작성을 놓친다.
+  #     | 확인 | 시험실무자 | 기술책임자 |
+  #     |      | 성명  (서명) | 성명  (서명) |
+  signatures:
+  - role: 시험실무자
+    placeholder: 성명
+    at: below
+  - role: 기술책임자
+    placeholder: 성명
+    at: below
+- key: 을지
+  form_no: SST-K-TI-03-04(08)
+  folder: 03.시험성적서 및 시험자료 기록
+  fields:
+  - name: 의뢰번호
+    from: table
+    labels:
+    - 의뢰번호
+    at: below
+    pattern: SST-\d{2}-\d{3}
+    required: true
+  - name: 성적서번호
+    from: table
+    labels:
+    - 성적서번호
+    at: below
+    pattern: SST-\d{2}-\d{3}-C\d+
+    required: true
+  - name: 시험기간
+    from: table
+    labels:
+    - 시험기간
+    at: below
+    format: date_range
+    required: true
+  - name: 의뢰기관명
+    from: table
+    labels:
+    - 의뢰기관
+    at: below
+    required: true
+  - name: 제품명
+    from: table
+    labels:
+    - 시험 대상 품명
+    at: right
+    required: true
+  - name: 버전
+    from: table
+    labels:
+    - 버전
+    at: right
+    required: true
+  - name: 시험환경_온도
+    from: table
+    labels:
+    - 온도
+    at: right
+    required: true
+  - name: 시험환경_습도
+    from: table
+    labels:
+    - 습도
+    at: right
+    required: true
+inputs:
+- key: 접수문서
+  filename_hint: 시험 접수 문서
+ignore:
+- pattern: ^99\.
+  reason: 참고 예시
+page_count_source:
+- kind: published_pdf
+  pattern: \(검토용\)\.pdf$
+- kind: soffice_render
+case_wide:
+# 작성일자 선후 관계 (문서 간 md §4): 의뢰서 → 계획서 → 설계서 → 시험 수행.
+# 다른 항목과 달리 "다 같은가"가 아니라 **순서**가 값이다.
+#
+# 의뢰서는 빠져 있다. 결재란 구조가 달라 작성일자를 못 뽑는다 — 실측에서 접수일과
+# 성적서 발급 예정일만 나왔다. 고객이 쓰는 문서라 결재란이 없을 수 있다(팀 확인 대기,
+# docs/open-questions.md). 못 뽑는 것을 넣어두면 매번 "미검토"가 떠 소음이 된다.
+- id: W-작성일자-순서
+  field: 작성일자
+  rule: nondecreasing
+  outputs: [시험계획서, 시험설계서]
+# md 는 "의뢰번호 전 문서 일치"라고 했지만 실측으로 셋은 담고 있지 않다:
+#   시험의뢰 검토기록서  접수번호만 있고 의뢰번호가 없다
+#   제출물 확인증        머릿말에만 있다 (서식 레이어가 없어 못 읽는다)
+#   갑지                성적서번호만 있다
+# outputs: all 로 두면 영원히 미검토라 검사가 늘 빨갛다. 담고 있는 것만 대조하고
+# 셋은 팀 확인 사항으로 남긴다(docs/open-questions.md).
+- id: W-의뢰번호
+  field: 의뢰번호
+  rule: exact
+  outputs:
+  - 시험의뢰서
+  - 시험동의서
+  - 시험계획서
+  - 시험설계서
+  - 현장시험환경 체크리스트
+  - 시험기록서
+  - 을지
+- id: W-성적서번호
+  field: 성적서번호
+  rule: exact
+  outputs:
+  - 을지
+  - 시험기록서
+  - 갑지
+- id: W-제품명
+  field: 제품명
+  rule: exact
+  ignoring: version
+  outputs:
+  - 시험의뢰서
+  - 시험계획서
+  - 시험설계서
+  - 을지
+  - 시험기록서
+  - 갑지
+- id: W-시험합격기준
+  field: 시험합격기준
+  rule: exact
+  outputs:
+  - 시험의뢰서
+  - 시험설계서
+  - 을지
+  - 갑지
+- id: W-시험항목명
+  field: 시험항목명
+  rule: exact
+  outputs:
+  - 시험의뢰서
+  - 시험설계서
+  - 을지
+  - 갑지
+- id: W-시험환경_온도
+  field: 시험환경_온도
+  rule: exact
+  outputs:
+  - 시험계획서
+  - 시험설계서
+  - 을지
+  - 시험기록서
+  - 갑지
+- id: W-시험환경_습도
+  field: 시험환경_습도
+  rule: exact
+  outputs:
+  - 시험계획서
+  - 시험설계서
+  - 을지
+  - 시험기록서
+  - 갑지
+# 아래 넷은 md 가 §1 쌍으로 적었지만 3곳 이상에 걸친 값이라 여기로 접었다.
+# 쌍으로 두면 같은 결함이 쌍 수만큼 지적된다 — 시험기간은 3곳이라 3번, 의뢰기관명은
+# 4곳이라 6번(쌍 조합) 난다. md §3 이 "2개 문서만으로는 부분 판정"이라 한 그대로다.
+- id: W-접수번호
+  field: 접수번호
+  rule: exact
+  outputs:
+  - 시험의뢰서
+  - 시험의뢰 검토기록서
+  - 현장시험환경 체크리스트
+  - 시험기록서
+- id: W-의뢰기관명
+  field: 의뢰기관명
+  rule: exact
+  outputs:
+  - 시험의뢰서
+  - 시험의뢰 검토기록서
+  - 을지
+  - 갑지
+- id: W-버전
+  field: 버전
+  rule: exact
+  outputs:
+  - 시험계획서
+  - 시험설계서
+  - 을지
+- id: W-시험기간
+  field: 시험기간
+  rule: exact
+  outputs:
+  - 시험계획서
+  - 을지
+  - 갑지
+- id: W-시험일자
+  field: 시험일자
+  rule: exact
+  outputs:
+  - 시험계획서
+  - 현장시험환경 체크리스트
+  - 시험기록서
+# md §1 은 문서쌍 18개 · 87항목을 적었다. 그중 여기 남는 것은 **정확히 2곳에만
+# 있는 값**뿐이다. 3곳 이상은 위 case_wide 로 접었고(지적 1건 · 근거 N개),
+# 표 전체를 훑어야 하는 항목(시험절차·부록·장비 목록·수식)은 추출 어휘가 없어
+# 아직 못 한다. 쌍별 내역은 docs/open-questions.md 의 표를 본다.
+pairs:
+- id: 1-7
+  left: 시험의뢰서
+  right: 갑지
+  priority: high
+  rows:
+  - field: 대표자
+  - field: 의뢰기관주소
+  - field: 성적서용도
+- id: 1-12
+  left: 시험기록서
+  right: 갑지
+  rows:
+  - field: 시험방법
+- id: 1-16
+  left: 시험의뢰서
+  right: 시험의뢰 검토기록서
+  rows:
+  - field: 접수일
+manual:
+- id: M-접수번호
+  text: 접수번호가 올바른 값인가
+  against: 시스템 부여값
+- id: M-접수일
+  text: 접수일이 works 등록 일자와 같은가
+  against: works
+- id: M-의뢰기관명
+  text: 의뢰기관명이 사업자등록증 표기와 같은가 (띄어쓰기 포함)
+  against: 사업자등록증
+items:
+- 'no': 칸값-1
+  group: 산출물별 필수 칸
+  text: 문서 양식 검토
+  note: |-
+    시험 산출물에 따라 작성해야 하는 항목들이 비어 있지 않고, 작성되어 있는지 검토
+    - 필수 항목 누락 여부, 표 가운데 정렬, 머릿말 작성 여부, 최신 문서 양식 적용 여부 등
+
+    산출물별 필수 작성 필드(리스트) 확인 → 본문 전체의 해당 필드를 확인하여, 작성 여부 확인 → 식별된 누락 내역, 양식 미적용 내역 정리
+  agent: 형식·완전성
+  source: 문서검증 No.12
+  mode: 규칙
+  check: field_presence
+  # params.fields 를 안 적었다 = 그 산출물의 칸을 **전부** 본다. 이 팀은 산출물이
+  # 여럿이고 산출물마다 칸이 달라서(위 outputs 절), 기준이 이름을 미리 못 적는다.
+  # 어느 산출물인지는 파일명으로 가린다 — 못 가리면 검사를 걸지 않고 그 사실을 남긴다.
+  #
+  # 본문의 "표 가운데 정렬·머릿말·최신 양식"은 아직 못 한다. 이 항목의 결과는
+  # "필수 항목 누락 여부"에 대한 것뿐이다.
+- 'no': 서식-1
+  group: 서식
+  text: 글꼴 맑은 고딕 9 pt, 색 검정(서명 칸 제외), 스타일 보통
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.2
+- 'no': 서식-2
+  group: 서식
+  text: 머릿말에 의뢰번호·성적서번호 기재
+  agent: 형식·완전성
+  # **md 는 이것을 §1.2(전 문서 공통)에 뒀지만 실문서는 제각각이다.** 실측(산출물
+  # 11종): 의뢰번호는 8종에서 읽히고 현장체크리스트·기록서·갑지에는 없다.
+  # 성적서번호는 을지에만 있다. 그래서 이 기준은 여러 문서에서 MAJOR 를 낸다.
+  #
+  # 기준을 md 대로 둔 것은 **팀이 그렇게 적었기 때문**이다. 팀이 "갑지는 머릿말이
+  # 없는 게 맞다" 고 하면 그때 applies_to 로 대상을 좁힌다 — 우리가 임의로 좁히면
+  # 팀 규정과 다른 잣대로 재게 된다.
+  mode: 규칙
+  check: header_footer
+  source: 단일문서 §1.2
+  params:
+    where: header
+    contains: [의뢰번호, 성적서번호]
+    _no: 서식-2
+- 'no': 서식-3
+  group: 서식
+  text: 꼬리말에 페이지·양식 번호 기재
+  agent: 형식·완전성
+  mode: 규칙
+  check: header_footer
+  source: 단일문서 §1.2
+  params:
+    where: footer
+    pattern: '페이지\s*\(\s*\d+\s*\)'
+    message: '꼬리말에 `페이지 ( X ) / 총 ( Y )` 표기가 없습니다'
+    _no: 서식-3
+- 'no': 서식-4
+  group: 서식
+  text: 표 가운데 정렬 — 표 맞춤 가운데 / 텍스트 배치 없음 / 셀 세로 맞춤 가운데
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.2
+- 'no': 서식-5
+  group: 서식
+  text: 표의 행 번호가 순서대로(1, 2, 3 …)
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.2
+- 'no': 서식-6
+  group: 서식
+  text: '`-이하 여백-`·`-끝-`이 지정 형식 그대로 (서명이 문서 마지막이면 `-끝-` 제외)'
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.2
+- 'no': 서식-7
+  group: 서식
+  text: 단락 설정 — 한글 단어 잘림 허용 해제, 한글↔영어·한글↔숫자 간격 자동 조절 해제
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.2
+- 'no': 서식-8
+  group: 서식
+  text: 줄바꿈 지점에서 단어가 잘리지 않음
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.2
+- 'no': 서식-9
+  group: 서식
+  text: '페이지 `( X ) / 총 ( Y )` — 숫자 양옆 공백 1개, 총 페이지 = 실제 페이지 수'
+  agent: 형식·완전성
+  # **두 요구 중 앞쪽만 검사한다.** 표기 형식은 꼬리말을 보면 판정되지만,
+  # "총 페이지 = 실제 페이지 수" 는 문서의 진짜 쪽수를 알아야 한다. 파서가 센
+  # 쪽수(meta["pages"])는 변환을 거친 값이라 원본과 다를 수 있어(실측: 을지
+  # 꼬리말은 총 12 인데 파서는 8) 그걸로 지적을 내면 안 된다 — 지금은 문서
+  # 서식만 본다. 쪽수 대조는 파서가 원본 쪽수를 확정해 줄 때 붙인다.
+  mode: 규칙
+  check: header_footer
+  source: 단일문서 §1.2
+  params:
+    where: footer
+    # 서식-3 은 같은 자리를 **느슨하게** 본다(`페이지\s*\(\s*\d+\s*\)`) — 그건
+    # "있는가"를 묻는 기준이다. 여기는 "형식이 맞는가"라 공백을 딱 하나로 못박는다.
+    # 둘이 갈려 있어야 표기가 틀린 문서에서 서식-3 은 통과하고 서식-9 만 걸린다.
+    pattern: '페이지 \( \d+ \) / 총 \( \d+ \)'
+    message: '꼬리말 쪽수 표기가 `페이지 ( X ) / 총 ( Y )` 형식과 다릅니다 (숫자 양옆 공백 1개)'
+    _no: 서식-9
+- 'no': 표기-1
+  group: 표기
+  text: '빈 셀에 모두 `-` 입력 (공란 금지, `N/A` 대신 `-`)'
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.3
+- 'no': 표기-2
+  group: 표기
+  text: '날짜 `YYYY. MM. DD.` (마침표 3개·공백 포함), 기간은 `~` 양옆 공백 없음'
+  agent: 형식·완전성
+  mode: 규칙
+  check: text_pattern
+  source: 단일문서 §1.3
+  params:
+    find: '\d{4}\s*[.\-/]\s*\d{1,2}\s*[.\-/]\s*\d{1,2}\.?'
+    must: '\d{4}\. \d{2}\. \d{2}\.'
+    message: '날짜는 `YYYY. MM. DD.` 형식으로 씁니다 (마침표 3개·공백 포함)'
+    _no: 표기-2
+
+- 'no': 표기-3
+  group: 표기
+  text: '숫자와 단위 사이 공백 — `19.0 °C`, `10 배`, `1000 LOC`'
+  agent: 형식·완전성
+  # 한때 사람이었다 — "공통 기준의 오탈자 검사가 이미 본다"고 적어 뒀는데, 그건
+  # LLM 한테 맡긴다는 뜻이었다. 글자 모양만 보면 판정되는 것을 LLM 에 맡길 이유가
+  # 없다(text_pattern 머리말). 규칙이 싸고 확실하다.
+  mode: 규칙
+  check: text_pattern
+  source: 단일문서 §1.3
+  params:
+    # **붙어 있는 것만** 잡는다. `\d\s*단위` 로 쓰면 맞게 쓴 `26.6 °C` 까지 걸린다
+    # (표기-4 가 같은 실수를 한 번 했다).
+    #
+    # 단위 목록은 두 곳에서 왔다. md 가 든 것(`°C` `배` `LOC`)과, **팀 문서가
+    # 실제로 쓰는 것**이다 — 시험 산출물 11종에서 숫자 뒤에 공백 하나 두고 오는
+    # 낱말을 세어 골랐다: 회 30 · GB 18 · s 14 · GHz 11 · 건 7 · °C 7 · 개 6.
+    #
+    # `년`·`일`은 뺐다. `2026년 1월 1일` 같은 날짜 표기가 걸린다 — 날짜는 표기-2 가
+    # 따로 본다. 팀이 단위를 더 쓰면 여기에 더한다.
+    forbid: '\d(°C|°F|GHz|MHz|GB|MB|LOC|s|배|회|건|개|시간)'
+    message: 숫자와 단위 사이에 공백을 둡니다 — `19.0 °C`, `10 배`, `1000 LOC`
+    _no: 표기-3
+- 'no': 표기-4
+  group: 표기
+  text: '`%` 앞 공백 — `95 %`'
+  agent: 형식·완전성
+  mode: 규칙
+  check: text_pattern
+  source: 단일문서 §1.3
+  params:
+    forbid: '\d%'
+    message: '`%` 앞에 공백을 둡니다 — `95 %`'
+    _no: 표기-4
+
+- 'no': 표기-5
+  group: 표기
+  text: '천 단위 쉼표 미사용 — `10000`(O) / `10,000`(X)'
+  agent: 형식·완전성
+  mode: 규칙
+  check: text_pattern
+  source: 단일문서 §1.3
+  params:
+    forbid: '\d{1,3}(,\d{3})+'
+    message: '천 단위 쉼표를 쓰지 않습니다 — `10,000` 이 아니라 `10000`'
+    _no: 표기-5
+
+- 'no': 표기-6
+  group: 표기
+  text: '곱셈 기호 `×` 사용 (`x`·`X`·`*` 금지)'
+  agent: 형식·완전성
+  mode: 규칙
+  check: text_pattern
+  source: 단일문서 §1.3
+  params:
+    forbid: '\d\s*[xX*]\s*\d'
+    message: '곱셈은 `×` 를 씁니다 (`x`·`X`·`*` 금지)'
+    _no: 표기-6
+
+- 'no': 표기-7
+  group: 표기
+  text: 체크박스가 항목당 하나만 선택(기호 종류 무관), 미선택으로 남은 항목 없음
+  agent: 형식·완전성
+  # 산출물별 §2 의 "선택 항목 하나씩"(의뢰서 6종·현장체크리스트 적합/부적합)이
+  # 전부 이 한 줄이다. 산출물마다 또 적으면 같은 결함이 산출물 수만큼 난다.
+  mode: 사람
+  source: 단일문서 §1.3
+- 'no': 표기-8
+  group: 표기
+  text: '버전 `X.Y` 형식'
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.3
+  # **규칙으로 옮겼다가 되돌렸다(2026-08-20).** `[Vv]er X.Y` 를 찾게 했더니 실문서의
+  # SW 버전(`DBeaver 23.2.0.202309041200`)이 걸렸다. md 가 말하는 "버전 X.Y" 는
+  # **제품 버전 칸**의 표기이지 본문 아무 데나 나오는 버전이 아니다 — 칸을 가려야
+  # 하는데 그건 outputs 의 버전 필드가 할 일이다(이미 있다: 갑지·을지 `버전`).
+
+- 'no': 표기-9
+  group: 표기
+  text: '특수문자 `±`·`×`·`°` 는 Unicode 문자 사용'
+  agent: 형식·완전성
+  mode: 규칙
+  check: text_pattern
+  source: 단일문서 §1.3
+  params:
+    forbid: '(\+/-|\+-|\bdeg\b|\(도\))'
+    message: '특수문자는 Unicode 를 씁니다 — `±` · `°`'
+    _no: 표기-9
+
+- 'no': 문장-1
+  group: 맞춤법·문장
+  text: '문서 내 종결 어미 일관 (`~한다` / `~함` 혼용 금지)'
+  agent: 표현·내용품질
+  # 문장 단위로 판정된다. common.yaml No.16(맞춤법·오탈자)이 안 보는 축이다.
+  mode: LLM-조각
+  source: 단일문서 §1.4
+- 'no': 문장-2
+  group: 맞춤법·문장
+  text: '제품명이 괄호 내용(`(과제명: …)(Ver X.Y)`)까지 온전히 기재'
+  agent: 형식·완전성
+  # 괄호 전체가 원본과 같은지는 의뢰서와 대조해야 안다 — case_wide W-제품명 몫.
+  # 여기서는 "괄호가 잘려 있지 않은가"만 남기고 사람에게 둔다.
+  mode: 사람
+  source: 단일문서 §1.4
+- 'no': 환경-1
+  group: 시험 환경 기재
+  text: 문서별 요구 시험 환경 정보가 누락 없이 기재 (계획서·설계서·갑지·기록서)
+  agent: 형식·완전성
+  # 문서마다 요구 항목이 다르다(md §1.5 표). 어느 산출물인지 가려야 판정되는데
+  # 기준에는 산출물별 적용 절이 없다 — outputs.fields 에 항목을 적어 두면
+  # field_presence 가 대신 본다. 그 칸 목록을 아직 실측하지 않았다.
+  mode: 사람
+  source: 단일문서 §1.5
+- 'no': 환경-2
+  group: 시험 환경 기재
+  text: 공유기·스위치 허브에 제조사 + 모델명 기재 (일반 명칭만 기재 금지)
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.5
+- 'no': 환경-3
+  group: 시험 환경 기재
+  text: '용량 표기 `XX.XX GB` — 숫자·단위 띄어쓰기 + 소수점 둘째 자리'
+  agent: 형식·완전성
+  mode: 규칙
+  check: text_pattern
+  source: 단일문서 §1.5
+  params:
+    find: '\d+(\.\d+)?\s*(GB|MB|TB)'
+    must: '\d+\.\d{2} (GB|MB|TB)'
+    message: '용량은 `XX.XX GB` 형식 — 숫자·단위 띄어쓰기 + 소수점 둘째 자리'
+    _no: 환경-3
+
+- 'no': 환경-4
+  group: 시험 환경 기재
+  text: '`bit`는 OS 뒤에 `64 bit` 형식'
+  agent: 형식·완전성
+  mode: 규칙
+  check: text_pattern
+  source: 단일문서 §1.5
+  params:
+    find: '\d+\s*[Bb]it'
+    must: '\d+ bit'
+    message: '`bit` 는 숫자 뒤 공백을 두고 소문자로 씁니다 — `64 bit`'
+    _no: 환경-4
+
+- 'no': 환경-5
+  group: 시험 환경 기재
+  text: SW 버전이 실제 버전 문자열까지 기재
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §1.5
+- 'no': 검토기록서-1
+  group: 시험의뢰 검토기록서
+  text: 시험의뢰 검토기록서 — 조건부 항목 기재(적용 시험방법 · 의사 결정 규칙)
+  applies_to: [시험의뢰 검토기록서]
+  agent: 형식·완전성
+  # 조건("표준명이 작성되는 경우"·"사전 논의가 있었던 경우")이 문서 밖에 있다.
+  # 비어 있는 것이 누락인지 해당없음인지 문서만 봐서는 못 가른다.
+  mode: 사람
+  source: 단일문서 §2 1-1
+- 'no': 의뢰서-1
+  group: 시험의뢰서
+  text: 시험의뢰서 — 시험합격기준이 명확하고 검증 가능한 내용으로 기재
+  applies_to: [시험의뢰서]
+  agent: 표현·내용품질
+  # 모호성 판정이라 문장 단위다("성능이 우수할 것" 같은 문장을 잡는다).
+  mode: LLM-조각
+  source: 단일문서 §2 1-2
+- 'no': 계획서-1
+  group: 시험계획서
+  text: 시험계획서 — 필요 장비·SW가 번호 + 내용 형식, SW는 버전 포함
+  applies_to: [시험계획서]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 2-1
+- 'no': 계획서-2
+  group: 시험계획서
+  text: 시험계획서 — 시험 일정표의 일자·업무·담당자·산출물·비고 기재 (빈 칸은 `-`)
+  # 표의 어느 칸인지 규격이 outputs 의 시험계획서 절에 없다. 라벨을 지어내면
+  # 엉뚱한 칸을 잡으므로 사람 몫으로 둔다.
+  applies_to: [시험계획서]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 2-1
+- 'no': 현장-1
+  group: 현장시험환경 체크리스트
+  text: 현장시험환경 체크리스트 — 모든 확인 항목이 적합 (부적합 있으면 조치 후 재확인)
+  applies_to: [현장시험환경 체크리스트]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 3-1
+- 'no': 설계서-1
+  group: 시험설계서
+  text: 시험설계서 — 용어정의 테이블 작성 (미작성 시 부적합)
+  applies_to: [시험설계서]
+  agent: 형식·완전성
+  # required_sections 로 켤 수 있다. params.required_sections 를 이 팀이
+  # 아직 안 적었고, 산출물별로 달라 한 줄로는 못 적는다.
+  mode: 사람
+  source: 단일문서 §2 3-2
+- 'no': 설계서-2
+  group: 시험설계서
+  text: '시험설계서 — 제약 사항·가정이 `TF1`, `TF2` … 번호로 체계적으로 기술'
+  applies_to: [시험설계서]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 3-2
+- 'no': 설계서-3
+  group: 시험설계서
+  text: 시험설계서 — 시험절차 표의 Pass/Fail 열에 실제 결과 표시
+  applies_to: [시험설계서]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 3-2
+- 'no': 설계서-4
+  group: 시험설계서
+  text: '시험설계서 — 시험 항목 및 합격 기준 표의 `TFX: 시험 항목`이 테스트케이스 표 첫 칸의 `TFX. 시험 항목` 및 아래 줄 수식·확인 항목과 문서 내에서 일치'
+  applies_to: [시험설계서]
+  agent: 정합성·추적성
+  # md 가 **문서 내 일치**라고 굵게 적은 줄. 앞쪽 항목 표와 뒤쪽 테스트케이스 표가
+  # 멀리 떨어져 있어 조각으로는 원리상 못 맞춘다.
+  mode: LLM-문서
+  source: 단일문서 §2 3-2
+- 'no': 설계서-5
+  group: 시험설계서
+  text: 시험설계서 — 시험 환경의 장비명이 부록-1 · 1-1 표의 "확인 사항" 장비 명칭과 문서 내에서 일치
+  applies_to: [시험설계서]
+  agent: 정합성·추적성
+  mode: LLM-문서
+  source: 단일문서 §2 3-2
+- 'no': 설계서-6
+  group: 시험설계서
+  text: 시험설계서·갑지 — 동일 지표에 동일 수식 사용, 수식 좌변 항목명이 문서 내에서 동일하게 식별
+  applies_to: [시험설계서, 갑지]
+  agent: 정합성·추적성
+  # 성질은 LLM-문서 다. 위 셋에 더하면 문서당 전체 호출이 6회가 되어 5분 목표를
+  # 재기 전에는 올리지 않는다. 실측 후 mode 만 바꾸면 켜진다.
+  mode: 사람
+  source: 단일문서 §2 3-2
+- 'no': 설계서-7
+  group: 시험설계서
+  text: |-
+    시험설계서·갑지 — 성능 지표명·측정 항목명이 문서 내에서 통일
+    (본문·표·수식 좌변·요약 전부)
+  # 위 D3-2-6(수식) 과 md 에서 나란히 있는 별개 줄이다. 이름 통일과 수식 통일은
+  # 다른 잘못이라 한 항목으로 묶으면 어느 쪽이 틀렸는지 화면이 말하지 못한다.
+  applies_to: [시험설계서, 갑지]
+  agent: 정합성·추적성
+  mode: LLM-문서
+  source: 단일문서 §2 3-2/4-2
+- 'no': 설계서-8
+  group: 시험설계서
+  text: '시험설계서 — 테스트케이스 글꼴 8 pt 또는 9 pt'
+# 표 안에 **직접 박힌** 크기만 본다. 워드는 대부분의 글자에 크기를 안 적고
+  # 문단 스타일이 정한다(실측: 시험설계서 런 405개 중 크기가 적힌 것은 23개).
+  # 그런데 이 팀 문서는 본문을 스타일에 맡기고 **테스트케이스 표만 직접 박는**
+  # 구조라, 직접 박힌 것이 곧 검사 대상과 겹친다 — 을지 표에서 8.0pt 123자가
+  # 그렇게 잡힌다. 스타일이 정하는 크기까지 재려면 상속 사슬(docDefaults →
+  # 스타일 → 문단 → 런)과 theme 해석이 필요하고, 그건 별도 작업이다.
+  applies_to: [시험설계서]
+  agent: 형식·완전성
+  mode: 규칙
+  check: fontsize
+  source: 단일문서 §2 3-2
+  params:
+    font_sizes: [8, 9]
+    _no: 설계서-8
+- 'no': 기록서-1
+  group: 시험기록서
+  text: '시험기록서 — raw data 저장 위치가 `\SST-26-XXX_일반성적서_의뢰기관명` 형식'
+  applies_to: [시험기록서]
+  agent: 형식·완전성
+  mode: 규칙
+  check: text_pattern
+  source: 단일문서 §2 4-1
+  params:
+    find: '\\SST-\d{2}-\d{3}[^\s|]*'
+    must: '\\SST-\d{2}-\d{3}_[가-힣A-Za-z]+_[가-힣A-Za-z0-9]+'
+    message: 'raw data 저장 위치는 `\SST-26-XXX_일반성적서_의뢰기관명` 형식'
+    _no: 기록서-1
+
+- 'no': 기록서-2
+  group: 시험기록서
+  text: 시험기록서 — 산출물 목록에 시험 중 생성된 파일이 누락 없이 기재
+  applies_to: [시험기록서]
+  agent: 형식·완전성
+  # 실제로 생성된 파일 목록이 문서 밖(폴더)에 있다.
+  mode: 사람
+  source: 단일문서 §2 4-1
+- 'no': 기록서-3
+  group: 시험기록서
+  text: 시험기록서 — 2페이지로 넘어가는 경우 머릿말에 의뢰번호 생성
+  applies_to: [시험기록서]
+  agent: 형식·완전성
+  mode: 규칙
+  check: header_footer
+  source: 단일문서 §2 4-1
+  params:
+    where: header
+    contains: [의뢰번호]
+    _no: 기록서-3
+- 'no': 을지-1
+  group: 을지 (시험결과)
+  text: 을지 — 을지의 첫 번째 페이지가 2페이지
+  applies_to: [을지]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 4-3
+- 'no': 을지-2
+  group: 을지 (시험결과)
+  text: '을지 — 번호 체계 (확인 사항 `1-1` / 부록 `부록-1` / 항목 나열 `1)` / 테스트케이스 `TF1-1`)'
+  applies_to: [을지]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 4-3
+- 'no': 을지-3
+  group: 을지 (시험결과)
+  text: '을지 — 설계서에서 형태 변환 (`(Pass 결과는 부록 X-X 확인)`, `■ Pass`)'
+  applies_to: [을지]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 4-3
+- 'no': 을지-4
+  group: 을지 (시험결과)
+  text: '을지 — 개요의 `시험 대상의 ~~시험을` 문구가 시험 항목명과 문서 내에서 일치'
+  applies_to: [을지]
+  agent: 정합성·추적성
+  # md 가 **문서 내 일치**라고 굵게 적은 줄.
+  mode: LLM-문서
+  source: 단일문서 §2 4-3
+- 'no': 을지-5
+  group: 을지 (시험결과)
+  text: '을지 — Pass/Fail 합계 집계가 항목 수와 맞음 (예: 총 15항목 중 15 Pass, 0 Fail)'
+  applies_to: [을지]
+  agent: 정합성·추적성
+  # 성질은 LLM-문서 다. D3-2-6 과 같은 이유로 실측 전까지 사람.
+  mode: 사람
+  source: 단일문서 §2 4-3
+- 'no': 을지-6
+  group: 을지 (시험결과)
+  text: '을지 — 테스트케이스 글꼴 8 pt 또는 9 pt'
+  applies_to: [을지]
+  agent: 형식·완전성
+  mode: 규칙
+  check: fontsize
+  source: 단일문서 §2 4-3
+  params:
+    font_sizes: [8, 9]
+    _no: 을지-6
+- 'no': 갑지-1
+  group: 갑지 (시험성적서)
+  text: '갑지 — 성적서 발급일이 `슈어소프트테크(주) 대표이사 (인)` 바로 위에 `YYYY. MM. DD.` 형식으로 작성'
+  applies_to: [갑지]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 4-2
+- 'no': 갑지-2
+  group: 갑지 (시험성적서)
+  text: '갑지 — 페이지 번호가 상단(`( 1 ) / ( X )`)과 꼬리글 양쪽에 작성'
+  applies_to: [갑지]
+  agent: 형식·완전성
+  mode: 사람
+  source: 단일문서 §2 4-2
+- 'no': 갑지-3
+  group: 갑지 (시험성적서)
+  text: '갑지 — 테스트케이스 글꼴 8 pt 또는 9 pt'
+  applies_to: [갑지]
+  agent: 형식·완전성
+  # **설계서-8·을지-6 과 같은 규칙인데 갑지에서만 사람이다.** 붙여 보고 되돌렸다.
+  #
+  # fontsize 검사기는 "어느 표"인지 못 가리고 표 안에 직접 박힌 크기를 다 본다.
+  # 설계서·을지는 본문을 스타일에 맡기고 테스트케이스 표만 직접 박아서, 직접
+  # 박힌 것이 곧 검사 대상이다(설계서 8pt 139자 · 을지 8pt 123자 — 둘 다 통과).
+  # 갑지는 구조가 다르다: 직접 박힌 것이 **기관명 표의 10pt 9자**뿐이고
+  # 테스트케이스 표가 없다. 규칙으로 두면 멀쩡한 갑지가 매번 MAJOR 로 뜬다.
+  #
+  # 표를 가려낼 수 있게 되면(기준이 표 제목을 주는 식) 그때 규칙으로 올린다.
+  mode: 사람
+  source: 단일문서 §2 4-2

@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DocSuree · 문서 일관성 검토 Agent</title>
+  <link rel="icon" href="favicon.ico?v=20260813-touch-fullbleed" sizes="48x48">
+  <link rel="icon" href="favicon-32.png?v=20260813-touch-fullbleed" type="image/png" sizes="32x32">
+  <link rel="icon" href="favicon-16.png?v=20260813-touch-fullbleed" type="image/png" sizes="16x16">
+  <!-- iOS 는 홈 화면 아이콘의 알파를 무시하고 검정에 얹는다. 그래서 이 자산만
+       투명 실루엣이 아니라 브랜드 파랑 풀블리드다(파비콘은 실루엣 그대로).
+       ?v= 는 위 셋과 달리 이 파일만 바뀌어서 따로 간다. -->
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=20260813-touch-fullbleed">
+  <style>
+    /* 서체는 두 벌뿐이고 전부 로컬(public/fonts/)이다 — 사내망에서 CDN 은 안 뜬다.
+       (예전엔 Inter·Pretendard·Spoqa 를 CDN 으로 더 부르고 있었는데 CSS 가 하나도
+        안 쓰거나 폴백으로만 걸려 있었다 — 로드만 하는 폰트는 지운다.)
+       기본 UI 는 Wanted Sans Variable 하나로 끝내고(위계는 굵기 축으로),
+       Gmarket Sans는 18px 이상 한글 대표 제목에만 쓴다. Medium은 중간 제목,
+       Bold는 타이틀에 매핑하고 Light는 불러오지 않는다. */
+    @font-face { font-family:'Wanted Sans Variable'; font-weight:100 900; font-display:swap;
+      src:url('public/fonts/WantedSansVariable.woff2') format('woff2-variations'); }
+    @font-face { font-family:'Gmarket Sans'; font-weight:500; font-display:swap;
+      src:url('public/fonts/GmarketSansMedium.woff') format('woff'); }
+    @font-face { font-family:'Gmarket Sans'; font-weight:700; font-display:swap;
+      src:url('public/fonts/GmarketSansBold.woff') format('woff'); }
+    :root {
+      /* Lexicon Precision — legal-tech, document-first, minimalist-professional
+         ─────────────────────────────────────────────────────────────────────
+         색은 **역할 셋**으로만 쓴다. 참고안(bentogrid_brown)이 갈색 하나로
+         화면을 묶고, 옅은 갈색으로 바탕을 깔고, 옅은 초록 하나만 포인트로
+         쓰는 것과 같은 구조다. 토큰은 원래 다 있었는데 이름이 역할이 아니라
+         정체(accent·gold·band-good)라서 쓰는 사람마다 다른 것을 골랐다.
+
+           브랜드   --brand-primary / --brand-secondary / --brand-accent
+                    마스코트의 딥 블루·깃털 크림·부리 골드. 정체성과 브랜드 장면을 맡는다.
+           메인색   --accent / --accent-ink / --accent-strong
+                    Primary에서 파생한 동작색. 누를 수 있는 것 · 지금 고른 것 · 진행 중인 것.
+                    "이건 앱이 하는 일"이라고 말하는 자리 전부.
+           (웜 톤 포인트는 **화면에 안 쓴다.** 크림·탠 받침 면, 브라운·골드
+                    숫자까지 한 바퀴 다 대 본 결론이다(2026-08-14) — 화면은 주색
+                    톤온톤으로 가고, 크림·골드는 마스코트·워드마크가 진다.)
+           배경색   --bg / --panel / --state-hover-neutral
+                    브랜드 쪽으로 아주 살짝 기운 중성면. 중립 목록·메뉴의 hover만
+                    이 토큰을 쓴다(캔버스 → 카드 → 중립 hover).
+           상태색   --state-hover-brand / --accent-weak
+                    파란 글자·테두리가 있는 보조 동작의 hover와 선택 상태를 분리한다.
+                    hover는 더 옅고, 선택 상태는 오래 남으므로 한 단계 분명하다.
+           포인트색 --band-good-fg / --band-good-bg
+                    초록. **좋은 소식 하나에만** 쓴다 — "지적 없음".
+                    메인색과 안 겹쳐야 "괜찮다"가 "누를 수 있다"로 안 읽힌다.
+
+         이 셋 밖은 신호색이고 뜻이 정해져 있다: 심각도 --sev-*(주황·노랑·회색),
+         문서 위 형광펜 --sev-*-hl, 반영 확인 --sev-past-*. 장식으로 쓰지 말 것.
+         ───────────────────────────────────────────────────────────────────── */
+      /* 앱 캔버스는 브랜드색이 아니라 기존의 조용한 웜 그레이로 둔다.
+         Secondary 크림은 로고·로그인처럼 의도적인 브랜드 장면에만 쓴다. */
+      --bg: #F7F6F3;
+      --panel: #FFFEFC;       /* elevated paper */
+      --panel-glass: rgba(255, 254, 252, 0.55); /* login material */
+      /* 경계선은 브랜드 크림과 분리한 기존 웜 그레이 계열이다. 카드가 베이지색
+         외곽선으로 둘러싸여 보이지 않도록 색차보다 명도 차이만 작게 둔다. */
+      --line: #E2DED7;
+      --line-2: #EAE6DF; /* subtle divider — hover 면과 명확히 분리 */
+      /* --line 보다 한 단 또렷한 윤곽. 드롭존 점선과 검토 기준의 빈 체크박스가
+         쓴다 — 둘 다 "아직 안 채워진 자리"라 --line 으로는 눈에 안 걸린다. */
+      --line-dashed: #C8C1B8;
+      /* 공용 hover는 브랜드 크림이 아니라 기존의 옅은 웜 그레이다. 넓은 최근 검토
+         행에서도 면이 진하게 솟지 않으면서 사이드바·프로필과 같은 반응을 준다. */
+      --state-hover-neutral: #F3F0EB; /* row / nav / menu hover */
+      /* 따뜻한 종이색 위에 순검정 대신 갈색 기가 아주 약한 차콜을 쓴다.
+         본문 위계도 같은 온도 안에서 명도만 벌린다. */
+      --text: #2B2926;        /* on-surface · 캔버스 위 13.42:1 */
+      --text-2: #55504A;      /* on-surface-variant · 7.38:1 */
+      /* 홈의 Gmarket Bold 전용 차콜. 본문 검정보다 한 단계 부드럽지만
+         --text-2까지 흐려지지 않아 15px 카드 제목의 위계를 지킨다. */
+      --home-title: #403C38;
+      /* muted meta. 11~12px 라 4.5:1 을 넘겨야 한다. */
+      --text-3: #6B645E;      /* 캔버스 위 5.38:1 · 패널 위 5.77:1 */
+      /* 마스코트에서 추출한 공식 색. 돋보기의 진한 블루가 동작과 정밀함,
+         깃털 그림자 크림이 종이 바탕을 맡는다. 밝은 렌즈 블루는 글자를 받지
+         않는 진행·스캔 그래픽에만 써 두 파랑이 경쟁하지 않게 한다.
+         로그인 히어로를 더 선명한 렌더로 갈면서 돋보기 테가 #277EF0(채도 87%)
+         으로 왔는데, 그 색은 **되돌렸다.** 화면에서 그것만 발광했다 —
+         버튼도 면도 전부 차분한 파랑인데 돋보기 하나가 다른 세계에서 온 물건처럼
+         보였다. 지금은 #4C97D6(채도 65%)이다.
+         고른 근거는 취향이 아니라 **다른 자산이 이미 정해 놓은 값**이다:
+         헤더 로고 #5898D8 · apple-touch-icon #5898D8 · 홈 마스코트 #4898D8.
+         로고는 같은 문제(파란 원반 위의 돋보기)를 색상이 아니라 **명도**로
+         풀어 놨고, 히어로도 같은 자리에 세운 것이다. 로그인 직후 좌상단에
+         그 로고가 붙는다 — 2초 사이에 같은 캐릭터가 도구 색을 바꿔 들면 안 된다.
+         참고로 brand/source/logo-mark-legacy-blue-192.png 의 #1878F8 이
+         그 쨍한 파랑이다. 파일명이 legacy 인 건 한 번 쓰고 물렸다는 뜻이다. */
+      --brand-primary: #356998;
+      --brand-secondary: #F2E0D4;
+      --brand-highlight: #4C97D6;
+      --brand-deep: #284F73;
+      /* 마스코트 부리에서 가져온 공식 Accent(전 --brand-wordmark — 브랜드 3색을
+         정립하며 역할 이름으로 바꿨다). 큰 `Suree`와 캐릭터에만 쓴다.
+         화면 포인트로 꺼내는 실험(골드·브라운 숫자)을 했다가 주색 톤온톤으로
+         결론 냈다(2026-08-14) — 버튼·칩·작은 글씨에는 확장하지 않는다. */
+      --brand-accent: #FABE53;
+      --accent: var(--brand-primary); /* 로고·아이콘·진행·포커스 */
+      --accent-ink: var(--brand-primary);/* 밝은 배경 위 링크·활성 글자 · 7.22:1 */
+      --accent-strong: var(--brand-deep);/* 브랜드 면 hover / pressed */
+      /* --accent 의 RGB 채널. rgba() 는 hex 변수를 못 받아서 그림자·선택색·연한
+         배경처럼 알파가 필요한 곳은 이 토큰을 쓴다. --accent 를 바꾸면 같이 바꿀 것. */
+      --accent-rgb: 53,105,152;
+      --state-hover-brand: rgba(var(--accent-rgb),.065); /* branded tertiary action hover */
+      --accent-weak: rgba(var(--accent-rgb),.12); /* selected / persistent blue surface */
+      /* Primary는 흰 글자와 5.79:1이라 버튼·활성 나브에 그대로 쓴다. */
+      --accent-surface: var(--brand-primary);
+      --neutral: #9A8D84;
+      --neutral-strong: #E2DED7;/* 면 전용 */
+      --neutral-ink: #5E544D;/* neutral-weak 면 위 글자 */
+      --neutral-weak: rgba(122,103,91,.11);
+      /* 심각도 — 브랜드색과 분리된 신호색. 주황·빨강은 여기서만 쓴다. */
+      --sev-crit-bg: rgba(220, 38, 38, 0.1);
+      --sev-crit-fg: #B91C1C;
+      --sev-crit-bd: rgba(220, 38, 38, 0.2);
+      --sev-maj-bg: rgba(234, 88, 12, 0.1);
+      --sev-maj-fg: #C2410C;
+      --sev-maj-bd: rgba(234, 88, 12, 0.2);
+      --sev-min-bg: rgba(202, 138, 4, 0.1);
+      --sev-min-fg: #854D0E;   /* 연한 노랑 면 위 6.21:1 (전 #A16207 은 4.46) */
+      --sev-min-bd: rgba(202, 138, 4, 0.2);
+      /* Info 는 최하위 등급이라 색을 빼고 슬레이트로 끝맺는다. 예전엔 파랑이었는데
+         브랜드가 파랑이 되면서 "정보 등급"과 "브랜드 강조"가 구분되지 않았다. */
+      --sev-info-bg: rgba(100, 116, 139, 0.1);
+      --sev-info-fg: #475569;
+      --sev-info-bd: rgba(100, 116, 139, 0.2);
+      --sev-info-solid: #706D68; /* PDF 번호 배지 — 흰 글자 5.12:1 */
+      /* PDF 형광펜. --sev-*-bg 와 값이 다른 이유는 **놓이는 바닥이 다르기** 때문이다.
+         저쪽은 패널(테마 따라 뒤집힌다) 위의 칩 배경이고, 이쪽은 늘 흰 PDF 페이지
+         위에 얹는 반투명 형광펜이다 — pdf.js 는 페이지를 반전하지 않으므로 다크에서도
+         바닥이 희다. 그래서 여기엔 다크 오버라이드가 없다.
+         예전에는 pdfview.js 에 hex 로 박혀 있었고, info 만 파랑이라 브랜드 강조색과
+         구분되지 않았다(위 --sev-info-* 주석에서 이미 파랑을 버렸는데 여기만 남았다). */
+      --sev-maj-hl: rgba(234, 88, 12, .30);
+      --sev-min-hl: rgba(234, 179, 8, .38);
+      --sev-info-hl: rgba(100, 116, 139, .28);
+      /* 반영 확인 탭 전용. 거기서는 색이 심각도가 아니라 "지난 지적이 아직
+         남아 있다" 한 가지를 말한다 — 심각도 3색 어느 것과도 안 겹쳐야
+         두 탭이 다른 것을 말한다는 게 보인다.
+         보라를 버리고 그래파이트(Slate 700)로 내렸다 — "지난 것"은 심각도가
+         아니라 시간 상태라 유채색을 받을 이유가 없고, 화면의 유채색은
+         파랑(브랜드)과 심각도만 남긴다. info 형광펜(Slate 500 · .28)과 톤이
+         가깝지만 두 색은 다른 탭에 살고, 이 탭엔 번호 배지·'지난 판정' 라벨이
+         같이 붙는다. */
+      --sev-past-hl: rgba(51, 65, 85, .35);
+      /* 번호 배지용 불투명 색(형광펜은 반투명이라 글자가 안 보인다). */
+      --sev-past-solid: #334155;
+      /* "이상 없음" 칩. 심각도색과 분리된 판정 신호색이고, 색은 테마에 따라
+         뒤집힌다(다크 블록 참고).
+         warn/bad 는 지웠다 — 점수(양호/개선 필요/위험)를 뺐기 때문이다. 지적이
+         0건이라는 것은 검사 결과로 말할 수 있지만 "위험"은 말할 근거가 없었다.
+         근거는 CLAUDE.md "기능 방침 — 점수". */
+      --band-good-fg: #047857; --band-good-bg: rgba(16,185,129,.12);
+      /* 유리 토큰 넷(--glass·-weak·-line·-line-strong)은 검토 진행 화면 전용이었다.
+         그 화면이 홈·결과와 같은 불투명 패널로 내려오면서 쓰는 곳이 사라져 지웠다.
+         반투명은 이제 로그인 계열의 --panel-glass 하나뿐이다. */
+      --shimmer: rgba(255,255,255,0.5);   /* 진행바 반짝임 sweep — 라이트: 흰빛 */
+      /* 서체 2단 — 기본 UI는 Wanted Sans, 대표 제목은 Gmarket Sans다.
+         Gmarket은 페이지 제목처럼 18px 이상 짧은 한글 제목에만 쓴다.
+         영문 DocSuree 워드마크는 Wanted 800으로 별도 운용한다.
+         13~15px 홈 타일·작업 섹션은 Wanted 600으로 두어 작은 UI까지 Gmarket의
+         강한 골격이 번지는 것을 막는다. 이렇게 해야 단조로움은 줄면서 업무
+         화면이 스포츠 타이틀처럼 과장되지 않는다.
+         Wanted 두께 사다리(축 400~950): 400 본문 · 500 조용한 UI(나브·탭·메타)
+         · 600 칩·뱃지·작은 강조(13px 이하의 상한) · 700 카드/섹션/페이지 제목
+         · 800 은 22px+ 큰 통계 숫자 전용. 한때 700 의 절반이 11~13px 칩에
+         몰려 "제일 작은 글씨가 제일 굵은" 역전이 있었다 — 작은 글씨는 600 에서
+         멈추고, 무게는 크기와 같은 방향으로만 는다(design_tokens 테스트가 지킨다).
+
+         크기 사다리 — 11 · 12 · 13 · 14 · 15 · 18 · 22 · 28 · 40.
+         한때 실제로 쓰이는 값이 18종이었다(9 · 10 · 12.5 · 13.5 · 16 · 17 · 19 ·
+         20 · 24 가 섞여 있었다). 전부 사다리 안으로 접었다. **14 는 없애지 않고
+         정식으로 들였다** — 38 회 쓰이고 라벨·본문 문단에 두루 걸려 있어, 오타가
+         아니라 이미 자리를 잡은 단이었다. 다만 11~15 다섯 단이 연달아 붙어 있는
+         것은 아직 부채다: "13 인가 14 인가"에 답할 규칙이 없다. 줄이려면 자리마다
+         눈으로 봐야 한다.
+         font-size 로 **아이콘 크기**를 주는 자리(ICONS 는 width:1em 이다)가 여섯
+         군데 남아 있다(16 · 20 · 24px — .qs-icon 등). 글자 사다리와 다른 체계라
+         접지 않았다. 세는 사람은 이 둘을 구별해야 한다.
+
+         행간 사다리 — 1(큰 숫자·한 줄) · 1.2(큰 제목) · 1.4(작은 제목·조밀한 UI)
+         · 1.6(여러 줄로 읽는 본문). 예전엔 14종이었고 1.45·1.5·1.55·1.6·1.65 가
+         나란히 있었다 — 아무도 구별 못 하는 차이에 매번 판단 비용만 냈다.
+         행간은 크기와 반대로 움직인다: 크면 좁게, 작으면 넓게. */
+      --font-display: 'Gmarket Sans', 'Wanted Sans Variable', sans-serif;
+      --font-body: 'Wanted Sans Variable', system-ui, -apple-system, sans-serif;
+      /* 모서리 — 예전엔 6·7·8·10·12·16·20·24 여덟 종류가 한 화면에 섞여 있었다.
+         네 단이면 충분하다: 칩 → 카드 → 모달 → 벤토 타일. 값을 고르는 기준은
+         "이 면이 얼마나 큰가" 하나다. */
+      --r-sm: 8px;    /* 칩·작은 버튼·입력 */
+      --r-md: 12px;   /* 카드·패널·드롭다운 */
+      --r-lg: 16px;   /* 모달·드롭존 */
+      --r-xl: 20px;   /* 벤토 타일 */
+      /* 그림자 — 세 단. 인라인 rgba(0,0,0,...) 로 흩어져 있던 것을 모은다.
+         다크에서 그림자는 더 진해야 한다(어두운 면 위에서 옅은 검정은 안 보인다)
+         — 그래서 토큰이어야 한다. 인라인 값은 테마를 못 따라간다. */
+      --sh-1: 0 1px 2px rgba(79,56,44,.04);
+      --sh-2: 0 4px 12px rgba(79,56,44,.06);
+      --sh-3: 0 8px 30px rgba(79,56,44,.08);
+      /* 모션 — 이징은 둘이면 충분하다. --ease-out 은 들어오는 것·hover·이동
+         전부(빠르게 출발해 부드럽게 안착), --ease-spring 은 방금 끝난 것을
+         살짝 튕겨 강조할 때(popIn)만. 지속시간 사다리는 **세 단**이다:
+         .15s(hover 색·면) · .2s(transform·등장) · .3s(값이 실제로 이동하는 것 —
+         진행바 폭·펼침·완료 강조). 세 번째 단은 원래 문서에 없었는데 코드에는
+         .24s·.3s·.4s 로 흩어져 있었다 — 값이 먼 거리를 가는 전환은 hover 와 같은
+         박자로 두면 튄다. 있는 것을 이름 붙여 접었지, 새로 만든 게 아니다.
+         나가는 것은 이 앱이 렌더로 제거하므로 따로 두지 않는다.
+         사다리 밖은 둘뿐이다: 무한 반복(spin·blobFloat 등)과 로그인 계열의
+         **첫 등장 연출**(fadeUp .4~.8s + 단계 지연). 후자는 화면당 한 번만
+         돌고 상호작용이 아니라, 같은 박자로 맞추면 오히려 급해 보인다.
+         transform·opacity 위주로만 움직인다(GPU). */
+      --ease-out: cubic-bezier(.16, 1, .3, 1);
+      --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+      --sidebar-shadow: 7px 0 22px rgba(79,56,44,.08);
+    }
+    /* app.js 의 setTheme 이 <html data-theme="dark"> 를 건다. 표면·글자만 뒤집고
+       브랜드 2색은 그대로 둔다 — 로고 색은 테마를 따라 움직이지 않는다. */
+    [data-theme="dark"] {
+      /* 깃털 크림의 온도를 웜 차콜로 뒤집는다. 캔버스 → 패널 → 호버 → 선이
+         모두 같은 갈색 기를 가져 다크 화면에서 청회색 조각이 튀지 않는다.
+         캔버스와 패널은 **양쪽으로** 벌렸다(#1F1D1B/#282522 → #191715/#2B2825)
+         — 그 간격에서는 카드가 배경과 한 덩어리로 보였다. 패널을 더 밝히는
+         쪽으로만 벌리면 파랑 기준 타일이 패널에 묻힌다(≥2.5:1 가드가
+         test_채운_면이_패널에_묻히지_않는다 에 있다) — 그래서 캔버스가 내려갔다. */
+      --bg: #191715;
+      --panel: #2B2825;
+      --panel-glass: rgba(43, 40, 37, 0.62);
+      --line: #413B36;
+      /* 카드 테두리. 패널보다 어두우면 경계가 아예 안 그려진다 — 패널이 밝아진
+         만큼 같이 올린다(패널 위 1.16:1 — 은은하지만 실재하는 선). */
+      --line-2: #38322E;
+      --line-dashed: #615851;
+      --state-hover-neutral: #332F2B;
+      --text: #F7F1EB;
+      --text-2: #D8CEC5;
+      /* 다크에서는 순백에 가까운 --text의 대비를 한 단계 누그러뜨린다. */
+      --home-title: #E5DCD4;
+      /* 작은 글씨(11~12px)라 4.5:1 을 넘겨야 한다. Slate 500 은 패널 위
+         3.53:1 이라 사이드바의 소속 팀처럼 어두운 상자 위에서 안 읽혔다. */
+      --text-3: #AEA298;      /* 패널 위 6.11:1 · 캔버스 위 6.74:1 */
+      /* 다크의 선·아이콘은 마스코트 렌즈 블루로 밝히고, 흰 글자 채움은 공식
+         Primary를 유지한다. 둘 다 마스코트 안의 같은 블루 계열이다. */
+      --accent: #4C97D6;
+      --accent-rgb: 76,151,214;
+      --accent-strong: #284F73;
+      --accent-ink: #9CC6E8;
+      --state-hover-brand: rgba(var(--accent-rgb),.10);
+      --accent-weak: rgba(var(--accent-rgb),.16);
+      --accent-surface: #356998;
+      --neutral: #A79B91;
+      --neutral-strong: #413B36;
+      --neutral-weak: rgba(174,162,152,.15);
+      --neutral-ink: #D8CEC5;
+      --sev-crit-bg: rgba(248, 113, 113, 0.15);
+      --sev-crit-fg: #FCA5A5;
+      --sev-crit-bd: rgba(248, 113, 113, 0.3);
+      --sev-maj-bg: rgba(251, 146, 60, 0.15);
+      --sev-maj-fg: #FDBA74;
+      --sev-maj-bd: rgba(251, 146, 60, 0.3);
+      --sev-min-bg: rgba(250, 204, 21, 0.15);
+      --sev-min-fg: #FDE047;
+      --sev-min-bd: rgba(250, 204, 21, 0.3);
+      --sev-info-bg: rgba(148, 163, 184, 0.15);
+      --sev-info-fg: #94A3B8;
+      --sev-info-bd: rgba(148, 163, 184, 0.3);
+      /* "이상 없음" 칩: 어두운 배경 위에서 읽히게 밝은 파스텔로. bg는 살짝 진하게. */
+      --band-good-fg: #6EE7B7; --band-good-bg: rgba(16,185,129,.18);
+      --shimmer: rgba(255,255,255,0.14);   /* 다크: 흰 막이 회색 상자로 안 보이게 옅게 */
+      /* 어두운 면 위에서는 옅은 검정 그림자가 안 보인다 — 같은 단계라도 더 진하게.
+         반경(--r-*)은 테마를 안 탄다: 모서리는 빛이 아니라 형태다. */
+      --sh-1: 0 1px 2px rgba(0,0,0,.30);
+      --sh-2: 0 4px 12px rgba(0,0,0,.35);
+      --sh-3: 0 8px 30px rgba(0,0,0,.40);
+      --sidebar-shadow: 7px 0 22px rgba(0,0,0,.34);
+    }
+    /* 움직임을 줄여 달라고 한 사람에게는 줄인다. 이 앱에는 무한 반복이 일곱
+       종류(blobFloat·dvpulse·floatOrb·shimmer·spin) 돌고 있었고, 그중 어느 것도
+       이 설정을 보지 않았다 — 전정 장애가 있는 사람에게는 로그인 화면의 떠다니는
+       도형만으로도 어지럽다. (그중 floatOrb 둘은 그 뒤 검토 진행 화면에서
+       통째로 걷어냈다 — 5분짜리 대기 화면의 전면 반복은 설정으로 줄일 게
+       아니라 애초에 없어야 했다.)
+       한 방에 끄는 대신 **회전만 남긴다.** 나머지는 장식이지만 spin 은 정보다:
+       "아직 일하는 중"을 그 회전이 혼자 말한다(검토는 최대 5분이다). 멈추면
+       멎은 화면과 구별되지 않는다. 대신 느리게 돌려 자극을 낮춘다.
+       iteration-count 를 1 로 두는 흔한 방법은 여기서 쓰면 안 된다 — 스피너가
+       한 바퀴만 돌고 굳어 버려서, 아예 없는 것보다 나쁘다. */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-delay: 0ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+      }
+      /* 인라인 style 로 붙는다(views.js). 클래스가 아니라 속성으로 집는 이유다. */
+      [style*="animation:spin"] {
+        animation: spin 2.4s linear infinite !important;
+      }
+      /* 상태 문구가 그대로 있어 의미는 유지된다. 모래시계는 반복 회전 대신
+         아주 느린 한 번의 전환만 보여 줘 장시간 검토에서도 부담을 줄인다. */
+      .review-hourglass {
+        animation: hourglassTurn 4.8s linear 1 !important;
+      }
+      /* 기준 타일에 있던 회전 예외 여섯 줄은 사라졌다 — 타일이 이제 안 돈다.
+         움직임 줄이기가 층을 펴 주던 일도, 층별 큰 수를 숨기던 일도 필요 없다.
+         모두에게 늘 같은 화면이 나가는 것이 이 설정을 가장 잘 지키는 방법이다. */
+    }
+    /* 투명도를 줄여 달라고 한 사람에게는 줄인다 — 움직임과 같은 판단의 나머지
+       절반이다. 반투명 면은 그 뒤가 비쳐야 정보가 아니라 재질이라, 불투명한
+       패널로 바꿔도 잃는 게 없다. 남은 반투명은 로그인 계열의 --panel-glass
+       하나다(검토 진행 화면의 유리 넷은 아예 지웠다). blur 는 views.js 가
+       인라인 style 로 붙이므로 클래스가 아니라 속성으로 집는다(위 spin 과 같은 이유).
+       --shimmer 는 건드리지 않는다 — 진행바 sweep 은 재질이 아니라 "일하는 중"
+       신호다(reduced-motion 에서 spin 을 남긴 것과 같은 이유). */
+    @media (prefers-reduced-transparency: reduce) {
+      :root, [data-theme="dark"] { --panel-glass: var(--panel); }
+      [style*="backdrop-filter"] { backdrop-filter: none !important; }
+    }
+
+    @keyframes dvpulse { 0%,100% { box-shadow: 0 0 0 0 var(--pc); } 50% { box-shadow: 0 0 0 5px transparent; } }
+    @keyframes fadeUp {
+      0% { opacity: 0; transform: translateY(30px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      0% { opacity: 0; transform: translateY(8px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes shimmer { 100% { transform: translateX(100%); } }
+    @keyframes bgPan {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    /* 모래가 내려가는 시간을 잠깐 둔 뒤 뒤집는다. 계속 빙글빙글 도는 스피너보다
+       '검토가 진행 중'이라는 뜻이 분명하고 장시간 봐도 덜 부산스럽다. */
+    @keyframes hourglassTurn {
+      0%, 38% { transform: rotate(0deg); }
+      50%, 88% { transform: rotate(180deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .review-running-head { display: flex; align-items: center; gap: 10px; }
+    .review-hourglass {
+      width: 28px; height: 28px; flex: none; display: inline-flex;
+      align-items: center; justify-content: center; border-radius: 50%;
+      color: var(--accent-ink); background: var(--accent-weak);
+      transform-origin: center; animation: hourglassTurn 2.4s ease-in-out infinite;
+    }
+    .review-hourglass svg { width: 17px; height: 17px; display: block; }
+    /* 진행 본문의 세 상태는 같은 작은 동작 언어를 쓴다. 읽기는 문서 위를 훑는
+       선, 준비는 도는 점, 하단 상태는 맥박 점이다. 모두 뜻을 글자로도 적어
+       애니메이션이 꺼져도 상태를 잃지 않는다. */
+    .review-document-loading {
+      display: flex; align-items: center; gap: 12px; min-height: 62px;
+      margin-bottom: 24px; padding: 12px 16px; overflow: hidden;
+      background: linear-gradient(90deg, var(--panel), var(--accent-weak), var(--panel));
+      background-size: 220% 100%; border: 1px solid var(--line);
+      border-radius: var(--r-md); animation: reviewLoadingWash 3.2s ease-in-out infinite;
+    }
+    .review-document-loading strong { display: block; color: var(--text-2);
+                                      font-size: 13px; font-weight: 700; }
+    .review-document-loading small { display: block; margin-top: 4px; color: var(--text-3);
+                                     font-size: 11px; line-height: 1.4; }
+    .review-document-loading > .review-loading-dots { margin-left: auto; }
+    .review-document-scan {
+      position: relative; width: 34px; height: 38px; flex: none; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--accent-ink); border-radius: var(--r-sm);
+    }
+    .review-document-scan svg { width: 25px; height: 25px; margin: 0 !important; }
+    .review-document-scan i {
+      position: absolute; left: 5px; right: 5px; top: 7px; height: 2px;
+      border-radius: 2px; background: var(--accent);
+      box-shadow: 0 0 7px rgba(var(--accent-rgb), .45);
+      animation: reviewScan 1.8s ease-in-out infinite;
+    }
+    .review-warmup {
+      min-height: 88px; display: flex; align-items: center; justify-content: center;
+      gap: 10px; padding: 24px 0; color: var(--text-3); font-size: 13px;
+    }
+    .review-warmup-orbit {
+      position: relative; width: 18px; height: 18px; flex: none;
+      border: 1px solid var(--line-dashed); border-radius: 50%;
+    }
+    .review-warmup-orbit i {
+      position: absolute; left: 7px; top: -2px; width: 4px; height: 4px;
+      border-radius: 50%; background: var(--accent);
+      transform-origin: 2px 11px; animation: reviewOrbit 1.6s linear infinite;
+    }
+    .review-loading-dots { display: inline-flex; align-items: center; gap: 4px; min-width: 20px; }
+    .review-loading-dots i { width: 4px; height: 4px; border-radius: 50%;
+                             background: currentColor; animation: reviewDot 1.2s ease-in-out infinite; }
+    .review-loading-dots i:nth-child(2) { animation-delay: .15s; }
+    .review-loading-dots i:nth-child(3) { animation-delay: .3s; }
+    .review-live { display: inline-flex; align-items: center; gap: 8px;
+                   color: var(--accent-ink); font-weight: 650; }
+    .review-live > i { width: 7px; height: 7px; border-radius: 50%;
+                       background: var(--accent); box-shadow: 0 0 0 0 var(--accent-weak);
+                       animation: reviewPulse 1.6s ease-out infinite; }
+    .review-live .review-loading-dots { margin-left: -4px; color: var(--accent); }
+    @keyframes reviewLoadingWash {
+      0%, 100% { background-position: 100% 50%; }
+      50% { background-position: 0% 50%; }
+    }
+    @keyframes reviewScan {
+      0%, 100% { transform: translateY(0); opacity: .45; }
+      50% { transform: translateY(22px); opacity: 1; }
+    }
+    @keyframes reviewOrbit { to { transform: rotate(360deg); } }
+    @keyframes reviewDot {
+      0%, 60%, 100% { transform: translateY(0); opacity: .35; }
+      30% { transform: translateY(-3px); opacity: 1; }
+    }
+    @keyframes reviewPulse {
+      0% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), .32); }
+      70%, 100% { box-shadow: 0 0 0 7px rgba(var(--accent-rgb), 0); }
+    }
+    /* 실제 step 순서는 그대로 두고, 활성 레인의 색이 완료 회색으로 스미며 체크가
+       뒤이어 앉게 한다. 마지막 레인도 이 전환이 끝난 다음 완료 머리말로 이어진다. */
+    .review-lane-fill.is-completing {
+      animation: reviewLaneComplete .3s var(--ease-out);
+    }
+    .review-lane-check.is-new {
+      animation: reviewLaneCheck .3s var(--ease-spring) .08s both;
+    }
+    .review-complete-head { animation: fadeIn .3s var(--ease-out) both; }
+    .review-complete-check { animation: reviewCompleteCheck .3s var(--ease-spring) .08s both; }
+    .review-complete-copy { animation: fadeIn .3s var(--ease-out) .12s both; }
+    @keyframes reviewLaneComplete {
+      0% { background: var(--accent); box-shadow: 0 0 10px var(--accent-weak); }
+      100% { background: var(--neutral); box-shadow: none; }
+    }
+    @keyframes reviewLaneCheck {
+      0% { opacity: 0; transform: scale(.4) rotate(-16deg); }
+      70% { opacity: 1; transform: scale(1.12) rotate(0); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes reviewCompleteCheck {
+      0% { opacity: 0; transform: scale(.6); }
+      70% { opacity: 1; transform: scale(1.1); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    /* 결과 목록 진입 — 카드가 순차적으로 채워진다 */
+    @keyframes listIn {
+      0% { opacity: 0; transform: translateY(10px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    /* 지적사항 펼침 — 0fr→1fr 로 높이를 실제로 전환한다 */
+    @keyframes expandIn {
+      0% { grid-template-rows: 0fr; margin-top: 0; opacity: 0; }
+      100% { grid-template-rows: 1fr; margin-top: 16px; opacity: 1; }
+    }
+    /* 단계 완료 체크 — 살짝 튀어나온다 */
+    @keyframes popIn {
+      0% { transform: scale(0.2); }
+      70% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+    .expand { display: grid; grid-template-rows: 1fr; margin-top: 16px; }
+    .expand > div { overflow: hidden; min-height: 0; }
+
+    /* 미리보기의 근거 하이라이트. 지적이 들고 온 원문 인용에만 붙는다 —
+       verify_quotes가 "이 인용은 원문에 있다"를 이미 보증한 문장이다. */
+    mark { color: inherit; border-radius: 3px; padding: 2px 2px; }
+    /* 심각도별. 내보내기 리포트(views.js REPORT_CSS)와 같은 규칙이다 — 같은 문서를
+       화면에서 볼 때와 내보냈을 때 근거 색이 달라지면 안 된다. 여기는 패널 위라
+       --sev-*-bg 를 쓴다(테마 따라 뒤집힌다). PDF 위는 --sev-*-hl 이 따로 있다. */
+    mark.sev-major { background: var(--sev-maj-bg); box-shadow: 0 0 0 1px var(--sev-maj-bd); }
+    mark.sev-minor { background: var(--sev-min-bg); box-shadow: 0 0 0 1px var(--sev-min-bd); }
+    mark.sev-info  { background: var(--sev-info-bg); box-shadow: 0 0 0 1px var(--sev-info-bd); }
+    /* 심각도를 모를 때의 기본값(markLine 의 cls 기본). */
+    mark.hl { background: rgba(245, 158, 11, .28);
+              box-shadow: 0 0 0 1px rgba(245,158,11,.35); }
+    [data-theme="dark"] mark.hl { background: rgba(250, 204, 21, .22); }
+
+    /* 최근 검토 목록의 행. 예전엔 카드용 .pick을 썼는데, 그 hover는 box-shadow라
+       테두리도 radius도 없는 행에 걸면 각진 사각형이 글자에 딱 붙어 떴다.
+       행에는 그림자가 아니라 배경이 맞다 — 좌우로 물려 여백을 준다. */
+    /* 클릭 어피던스는 홈(.hrow)과 기록(.hrow-flush)이 같아야 한다 — 홈에서 행을 눌러
+       결과로 들어가는 걸 배운 사용자가 기록에서 같은 동작을 하면 통해야 한다.
+       여백만 다르다: 홈은 패널 위에 떠 있는 행이라 좌우로 물리고, 기록은 카드에
+       꽉 찬 테이블이라 자기 padding 을 그대로 쓴다. */
+    .hrow, .hrow-flush { cursor: pointer; transition: background .15s ease-out; }
+    /* 홈 행은 두 줄 정보를 유지하되 높이를 줄여 넓은 hover 띠가 무겁게 보이지 않게
+       한다. 5×76px 대신 6×60px 안팎이라 카드 전체도 조금 낮아진다. */
+    .hrow { border-radius: var(--r-md); padding: 8px; margin: 0 -8px; }
+    /* 홈과 기록 화면의 문서 행은 같은 정보 밀도를 쓴다. 15px·700 문서명과
+       13px·700 결과 칩은 짧은 타일 제목보다도 커 보여 목록만 튀었다. */
+    .history-doc-title { font-size: 14px; line-height: 1.4; font-weight: 600; color: var(--text); }
+    .history-doc-meta { font-size: 12px; line-height:1.4; color: var(--text-3); }
+    .history-count { font-size: 12px; line-height:1.4; font-weight: 600;
+                     padding: 6px 10px; border-radius: var(--r-sm); white-space: nowrap; }
+    .hrow .history-count { padding: 4px 8px; }
+    /* 최근 검토 행도 빠른 시작 카드와 같은 화살표 문법을 쓴다. 평소에는 조용히
+       자리를 지키고, 행 호버 때만 솔리드 브랜드 면으로 클릭 가능성을 말한다. */
+    .history-row-arrow { width: 30px; height: 30px; flex: none; border-radius: 10px;
+                         display: flex; align-items: center; justify-content: center;
+                         border: 1px solid transparent; color: var(--text-3); opacity: .58;
+                         transition: opacity .2s ease-out, transform .2s ease-out,
+                                     background .2s ease-out, color .2s ease-out,
+                                     border-color .2s ease-out; }
+    .history-row-arrow svg { margin: 0; }
+    .hrow .history-row-arrow { width: 28px; height: 28px; }
+    /* 터치에서는 hover 가 손을 뗀 뒤에도 남는다 — 움직이는 hover 는 전부
+       마우스에만 건다(.tile.act 와 같은 게이트). */
+    @media (hover: hover) and (pointer: fine) {
+      .hrow:hover .history-row-arrow { opacity: 1; transform: translateX(2px);
+                                       background: var(--accent); border-color: var(--accent);
+                                       color: #fff; }
+    }
+
+    /* 빠른 시작의 선행 아이콘은 기능을 뜻하는 솔리드 브랜드 면이다. 상태 칩은
+       연한 면을 유지해 액션과 결과가 같은 모양으로 읽히지 않게 한다.
+       (크림·탠 받침 면으로 바꿔 봤다가 되돌렸다 — 홈은 주색 톤온톤이다.
+       2026-08-14) */
+    .qs-icon { width: 38px; height: 38px; flex: none; border-radius: var(--r-md);
+               display: flex; align-items: center; justify-content: center;
+               background: var(--accent); color: #fff; font-size: 16px;
+               transition: background .2s ease-out, transform .2s ease-out; }
+    .tile.qs { min-height: 92px; width: 100%; appearance: none; text-align: left;
+               flex-direction: row; align-items: center; gap: 14px; padding: 16px 18px;
+               font: inherit; color: inherit; }
+    .qs-copy { flex: 1; min-width: 0; }
+    /* .tile.act 의 떠오름과 같은 게이트를 받는다 — 터치에서는 hover 가 손을 뗀
+       뒤에도 남아, 한 번 스친 시작 타일의 그림과 화살표가 눌린 채로 굳는다.
+       (그림·화살표 규칙이 파일 안에서 멀리 떨어져 있어 이쪽만 빠져 있었다.) */
+    @media (hover: hover) and (pointer: fine) {
+      .qs:hover .qs-icon { background: var(--accent-strong); transform: translateY(-1px); }
+    }
+
+    /* 빠른 시작 카드 — 화살표는 아이콘과 같은 squircle 계열로 자리를 지키되
+       평소에는 조용히 두고, 호버할 때만 색을 채운다. */
+    .qs-arrow { flex: none; width: 32px; height: 32px; border-radius: 10px;
+                display: flex; align-items: center; justify-content: center;
+                border: 1px solid transparent; color: var(--text-3); background: transparent;
+                opacity: .58;
+                transition: opacity .2s ease-out, transform .2s var(--ease-out),
+                            background .2s ease-out, color .2s ease-out,
+                            border-color .2s ease-out; }
+    .qs-arrow svg { margin: 0; vertical-align: middle; }
+
+    /* 벤토 격자 — 타일 크기를 달리해 무엇이 중요한지 눈으로 먼저 말한다.
+       칸 수는 폭에 따라 4 → 2 → 1 로 접히고, 넓은 타일도 같이 줄어든다.
+       (인라인 스타일로는 미디어 쿼리를 못 쓴다. 그래서 여기 둔다.) */
+    .bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+             gap: 14px; align-items: start; }
+    /* 기본은 제 높이지만, 한 줄에서 키를 맞춰야 하는 타일은 늘린다. */
+    .bento > .grow { align-self: stretch; }
+    .bento > .b2 { grid-column: span 2; }
+    .bento > .b3 { grid-column: span 3; }
+    .bento > .b4 { grid-column: span 4; }
+    .bento > .b6 { grid-column: span 6; }
+    /* 두 줄을 먹는 타일. **벤토가 벤토인 이유가 이거다** — 폭만 다르고 높이가 다
+       같으면 그건 격자가 아니라 줄이다. 옆 칸에 작은 타일 둘이 쌓인다. */
+    .bento > .r2 { grid-row: span 2; }
+    /* 좁아지면 **세 칸**으로 접는다. 두 칸으로 접었을 때는 폭이 1·1·1·2·1·2 라
+       홀수 자리에서 격자가 어긋나 빈 칸이 둘 생겼다 — 시작 타일 셋째 옆과 기준
+       타일 옆이 통째로 비어, 벤토가 아니라 "뭔가 안 그려진 화면"으로 읽혔다.
+       셋이면 시작 셋이 한 줄에 그대로 남고(1+1+1) 아래 줄이 최근 검토 2 + 기준
+       1 로 딱 맞는다. 넓은 화면(6칸)과 같은 자리 배치가 그대로 축소되는 셈이다. */
+    @media (max-width: 1100px) {
+      .bento { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .bento > .b2, .bento > .b3 { grid-column: span 1; }
+      .bento > .b4 { grid-column: span 2; }
+      .bento > .b6 { grid-column: span 3; }
+      /* 접히면 세로 span 은 옆에 쌓을 짝이 없어 빈 칸만 만든다. */
+      .bento > .r2 { grid-row: span 1; }
+    }
+    /* 세 칸이 200px 밑으로 떨어지면 가로형 시작 타일(그림 34 + 화살표 36)에
+       글자 자리가 안 남는다. 그때는 한 줄씩 세운다. */
+    @media (max-width: 900px) {
+      .bento { grid-template-columns: minmax(0, 1fr); }
+      .bento > .b2, .bento > .b3,
+      .bento > .b4, .bento > .b6 { grid-column: span 1; }
+    }
+    /* 여백은 참고안(bentogrid_brown)에 맞춰 한 단 조였다. 24px 패딩 · 20px
+       모서리는 카드 하나만 볼 때는 시원한데, 여섯 개가 격자로 깔리면 내용보다
+       빈 자리가 먼저 보인다. */
+    .tile { background: var(--panel); border: 1px solid var(--line-2);
+            border-radius: var(--r-lg); padding: 20px; display: flex;
+            flex-direction: column; gap: 10px; min-width: 0; overflow: hidden; }
+    /* 타일은 다 같은 흰 면이다(예외는 아래 .tile.crit 하나). 무게는 **크기와
+       자리**가 말한다 — 그게 벤토다.
+       색 면(그라데이션)도 강조 띠도 대봤는데 둘 다 시끄럽기만 했다.
+       누를 수 있는 타일은 아이콘 자리에만 브랜드색이 있고, 나머지는 호버가 말한다. */
+    /* 숫자 타일은 위에서부터 채운다. 격자가 높이를 늘려도 글자가 가운데로
+       떠내려가지 않게 — 가운데 정렬로 덮으면 여백만 커 보인다. */
+    .tile.stat { gap: 6px; padding: 18px 20px; justify-content: flex-start; }
+    /* 기준 타일 — 흰 면 규칙의 **유일한 예외.** 참고안(bentogrid_green)처럼
+       진한 브랜드 면을 주요 지표 하나에만 제한적으로 쓴다. "무엇으로 재는가"는
+       이 제품의 약속이라 흰 카드 사이에서 한 번은 서도 된다. 면은
+       --accent-surface — 흰 글자 AA 를 두 테마 모두 검사받는 토큰이다. */
+    /* 면은 --accent-surface 한 색이었는데, 넓은 단색 면이 화면에서 제일 큰
+       유채색 덩어리라 오히려 납작해 보였다. 같은 브랜드 블루 세 값 사이에서만
+       도는 사선 그라데이션으로 재질감을 준다 — 밝은 끝(Primary 72%+렌즈 블루)
+       위 흰 글자 4.83:1, 어두운 끝은 그보다 높다. 흰 타일의 그라데이션 금지
+       판단(위 주석)과 다른 자리다: 여긴 이미 브랜드 면이고 색상이 안 바뀐다. */
+    /* 흰 면 규칙의 유일한 예외. 특별한 이유는 **재질이 아니라 색**이다 — 한 장뿐인
+       브랜드 면이라는 사실은 그라디언트 없이도 그대로 말한다. 3단 그라디언트였을
+       때는 화면의 다른 면이 전부 불투명 단색이라 이 타일만 재질이 달랐고, 그 위에
+       얹힌 딥블루 상자가 바닥과 명도차를 잃어 뭉갰다. 같은 판단을 이 저장소가 이미
+       두 번 했다: 진행 패널이 유리에서 불투명 면으로 내려왔고, 웜 톤 받침 면도 대
+       봤다가 주색 톤온톤으로 되돌렸다(2026-08-14).
+       살아 있는 느낌은 hover 스포트라이트([data-glow])와 합류선 펄스가 낸다 —
+       둘 다 상호작용·시간이라 바닥에 구워 넣은 그라디언트와 다르다. */
+    .tile.crit { background: var(--accent-surface);
+                 border-color: transparent; color: #fff; }
+    /* 검토 기준 인포그래픽. 세 입력이 한 문서로 모이는 방향을 그대로 그린다.
+       겹친 원은 보기엔 좋았지만 벤 다이어그램의 교집합으로 읽힐 수 있었다.
+       실제 동작은 공통 ∪ 팀 ∪ 선택한 체크리스트이므로, 입력 카드 셋 → 합류선 →
+       검토 문서 순서가 더 정직하다. 상태는 hover 뒤로 숨기지 않는다. */
+    .crit-editorial { flex: 1; min-height: 238px; display: grid;
+                      grid-template-rows: minmax(156px, 1fr) auto;
+                      row-gap: 14px; padding-top: 4px; }
+    .crit-figure { min-width: 0; display: flex; align-items: center;
+                   justify-content: center; }
+    .crit-scope { width: 100%; max-width: 360px; height: 100%; max-height: 180px;
+                  display: grid; grid-template-columns: minmax(116px, 1fr) 48px 92px;
+                  align-items: center; }
+    .crit-sources { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+    /* 도식의 상자는 **채운 면**이되 파랑 안에서 간다.
+       반투명 흰 면(.14) + 흰 테두리는 바닥이 비쳐 "떠 있는 유리"로 읽혔다 —
+       이 저장소는 유리를 이미 한 번 걷어냈다(진행 패널: "재질이 튀면 다른 앱처럼
+       읽힌다"). 그렇다고 흰 면으로 채우면 브랜드 면 한 장 위에 카드가 넷 흩뿌려진
+       꼴이 되고, 흰색이 네 번 쓰여 아무 뜻도 없어진다.
+       팔레트가 이미 답을 적어 뒀다 — "화면은 주색 톤온톤으로 간다"(2026-08-14).
+       바닥(primary) → 상자(deep) → 문서(흰색) 로 깊이가 한 방향으로 선다.
+       **흰 면은 도착점 하나에만 쓴다** — 그래야 눈이 "검토 문서"에 떨어지고,
+       그게 이 그림이 하려는 말이다(세 기준을 모아 한 문서로). */
+    .crit-source-node { min-width: 0; min-height: 40px; padding: 8px 14px;
+                        display: flex; align-items: center; gap: 10px;
+                        border: 1px solid transparent;
+                        border-radius: var(--r-lg); background: var(--brand-deep);
+                        transition: background .2s var(--ease-out),
+                                    border-color .2s var(--ease-out); }
+    .crit-source-node b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                          white-space: nowrap; font-size: 12px; font-weight: 600;
+                          line-height: 1.4; letter-spacing: -.2px; color: #fff; }
+    .crit-source-node > span { flex: none; font-size: 11px; font-weight: 500;
+                               line-height: 1.4; color: rgba(255,255,255,.66);
+                               white-space: nowrap; }
+    /* 앞 칸의 점은 **상태**를 진다 — 채우면 이번 검토에 걸리고, 빈 링이면 안 걸린다.
+       번호(01·02·03)를 대 봤다가 버렸다: 세 기준은 1·2·3등이 아니라 합쳐지는
+       것이라 없는 순서를 말하게 되고, 검토 기준 화면에는 이미 진짜 기준 번호가
+       따로 있어 헷갈린다. 상자 셋이 같은 톤이라 이 점 하나가 구분을 다 진다. */
+    .crit-source-dot { flex: none; width: 7px; height: 7px; border-radius: 50%;
+                       background: #fff; }
+    .crit-source-node.is-optional .crit-source-dot,
+    .crit-source-node.is-off .crit-source-dot {
+      background: transparent; border: 1.5px solid rgba(255,255,255,.62);
+      box-sizing: border-box; }
+    /* 체크리스트는 보유하고 있어도 검토를 시작할 때 골라야 한다. 그 차이는 앞 칸의
+       **빈 링**과 합류선의 세기가 진다 — 상자까지 달리 칠하면 신호가 둘로 갈리고,
+       상자를 비우면 "안 걸린 것"과 구별되지 않는다. */
+    /* 안 걸린 층만 **비운다.** 채운 면 ↔ 빈 윤곽 — 검토 기준 화면의 칩과 같은
+       말이다(아직 아무도 안 채운 칸). 감추지는 않는다: 자리는 지킨다. */
+    .crit-source-node.is-off { border-style: dashed; border-color: rgba(255,255,255,.45);
+                               background: transparent; }
+    .crit-source-node.is-off b { color: rgba(255,255,255,.7); }
+    .crit-source-node.is-off span { color: rgba(255,255,255,.52); }
+    .crit-flow-lines { display: block; width: 100%; height: 150px; overflow: visible; }
+    /* 굵은 획 하나하나가 갈래다. 2px 가는 선 셋이 48px 안에서 겹쳐 뭉치던 자리라
+       굵기를 올리고 세기로 갈랐다 — 걸린 갈래는 또렷하게, 고르면 걸리는 갈래는
+       옅게. 경로(d)는 views.js 가 쥐고 있고 펄스가 같은 길을 쓰므로 건드리지
+       않는다. 안 걸린 갈래만 가늘고 점선이다: 이번엔 아무것도 안 흐른다는 뜻이다. */
+    .crit-flow-path, .crit-flow-out { fill: none; stroke: rgba(255,255,255,.4);
+                                      stroke-width: 6; stroke-linecap: round; }
+    .crit-flow-path.is-optional { stroke: rgba(255,255,255,.22); }
+    .crit-flow-path.is-off { stroke: rgba(255,255,255,.28); stroke-width: 2;
+                             stroke-dasharray: 4 4; }
+    /* 고정된 구조선 위로 짧은 빛 한 조각만 흘린다. 각 조각은 제 입력에서
+       합류점을 지나 문서 앞까지 한 경로로 움직여, 중간에서 끊겨 보이지 않는다. */
+    .crit-flow-pulse {
+      fill: none; stroke: rgba(255,255,255,.96); stroke-width: 4;
+      stroke-linecap: round; stroke-dasharray: 8 92; stroke-dashoffset: 100;
+      filter: drop-shadow(0 0 2px rgba(255,255,255,.55));
+      animation: critFlowTravel 3s linear infinite;
+    }
+    .crit-flow-pulse.is-second { animation-delay: .5s; }
+    .crit-flow-pulse.is-third { animation-delay: 1s; }
+    .crit-flow-pulse.is-optional { stroke: rgba(255,255,255,.72); filter: none; }
+    .crit-flow-pulse.is-off { stroke: rgba(255,255,255,.28); filter: none; }
+    /* 도착점. **이 그림에서 흰 면은 여기 하나뿐이다** — 톤온톤 파랑 사이에서
+       흰색이 한 번만 나오니 눈이 저절로 여기 떨어진다. 그림자를 한 겹 얹어
+       셋이 여기로 모인다는 것이 면의 세기로도 읽히게 한다. */
+    .crit-document-node { min-height: 112px; padding: 16px 10px; display: flex;
+                          flex-direction: column; align-items: center; justify-content: center;
+                          text-align: center; border: 1px solid transparent;
+                          border-radius: var(--r-lg); background: var(--bg); }
+    .crit-document-icon { width: 30px; height: 30px; display: flex; align-items: center;
+                          justify-content: center; margin-bottom: 8px;
+                          color: var(--accent-ink); }
+    .crit-document-icon svg { width: 28px; height: 28px; }
+    .crit-document-node b { font-size: 12px; font-weight: 700; line-height: 1.4;
+                            color: var(--text); }
+    .crit-document-node small { margin-top: 4px; font-size: 11px; font-weight: 500;
+                                line-height: 1.4; color: var(--text-3); }
+    /* 진입 때 입력 셋이 차례로 앉고 합류선과 문서가 뒤따른다. */
+    .scope-enter .crit-source-node:nth-child(1) {
+      animation: lensLand .3s var(--ease-out) var(--plane-delay, 0ms) both;
+    }
+    .scope-enter .crit-source-node:nth-child(2) {
+      animation: lensLand .3s var(--ease-out) calc(var(--plane-delay, 0ms) + 90ms) both;
+    }
+    .scope-enter .crit-source-node:nth-child(3) {
+      animation: lensLand .3s var(--ease-out) calc(var(--plane-delay, 0ms) + 180ms) both;
+    }
+    .scope-enter .crit-flow-lines {
+      animation: lensLand .3s var(--ease-out) calc(var(--plane-delay, 0ms) + 270ms) both;
+    }
+    .scope-enter .crit-document-node {
+      animation: lensLand .3s var(--ease-out) calc(var(--plane-delay, 0ms) + 360ms) both;
+    }
+    @keyframes lensLand {
+      from { opacity: 0; transform: scale(.86); }
+    }
+    @keyframes critFlowTravel {
+      0% { stroke-dashoffset: 100; opacity: 0; }
+      10% { opacity: 1; }
+      88% { opacity: 1; }
+      100% { stroke-dashoffset: 0; opacity: 0; }
+    }
+    .crit-statement { padding-top: 16px;
+                      border-top: 1px solid rgba(255,255,255,.24); }
+    .crit-statement-title { font-family: var(--font-display); font-size: 18px;
+                            font-weight: 700; line-height: 1.4; letter-spacing: -.035em;
+                            color: #fff; word-break: keep-all; }
+    .crit-note { margin-top: 4px; font-size: 11px; font-weight: 500; line-height: 1.4;
+                 color: rgba(255,255,255,.62); }
+    .crit-note span { display: block; }
+    .crit-note span + span { margin-top: 2px; }
+    .crit-loading { flex: 1; min-height: 238px; display: flex; align-items: center;
+                    font-size: 13px; font-weight: 600; line-height: 1.6;
+                    color: rgba(255,255,255,.82); }
+    /* 중간 폭에서도 그림을 없애지 않는다. 이전 규칙은 figure만 display:none으로
+       지우고 첫 grid row 140px은 남겨 큰 빈칸을 만들었다. 입력·선·문서를 조금
+       조여 같은 관계를 유지한다. */
+    @media (min-width: 721px) and (max-width: 1100px) {
+      .crit-scope { max-width: 300px;
+                    grid-template-columns: minmax(96px, 1fr) 36px 80px; }
+      .crit-source-node { padding-left: 8px; padding-right: 8px; gap: 0;
+                          flex-direction: column; align-items: flex-start;
+                          justify-content: center; }
+    }
+    /* 누를 수 있는 타일만 들린다 — 읽기만 하는 타일은 가만히 있어야 한다. */
+    .tile.act { cursor: pointer;
+                transition: border-color .2s var(--ease-out), background .2s var(--ease-out),
+                            box-shadow .2s var(--ease-out), transform .15s var(--ease-out); }
+    /* 바로 위 기준 타일의 회전 정지는 포인터로 게이트했으면서, 정작 타일이
+       2px 떠오르는 것은 안 했다 — 터치에서 홈 타일이 한 번 스치면 떠오른 채
+       붙어 있었다. 같은 판단은 같은 게이트를 받아야 한다. */
+    @media (hover: hover) and (pointer: fine) {
+      .tile.act:hover { border-color: var(--accent); transform: translateY(-2px);
+                        box-shadow: 0 10px 28px rgba(var(--accent-rgb), .10); }
+    }
+    /* 공용 타일 제목은 Wanted Sans다. 홈만 아래에서 Gmarket Sans를 쓰는 예외로
+       잠가, 이 규칙이 작업 화면의 카드·섹션 제목까지 번지지 않게 한다. */
+    .tile-h { font-family: var(--font-body); font-size: 15px; font-weight: 700;
+              line-height: 1.4; color: var(--text); letter-spacing: -.3px; }
+    /* 홈의 짧은 대표 제목만 포인트 서체로 묶는다. 빠른 시작·최근 검토·기준·방법이
+       같은 목소리를 내고, 범위 라벨·설명·문서명·버튼은 Wanted Sans로 남긴다. */
+    .home-layout .tile-h { font-family: var(--font-display); font-weight: 700;
+                          color: var(--home-title); }
+    .home-tile-head { min-height: 30px; display: flex; align-items: center;
+                      justify-content: space-between; gap: 12px; }
+    .home-tile-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .home-tile-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                      font-size: 12px; font-weight: 600; line-height: 1.4;
+                      color: var(--text-3); font-variant-numeric: tabular-nums; }
+    .home-recent-list { display: flex; flex-direction: column; gap: 2px; }
+    .history-row-main { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .history-row-tail { display: flex; align-items: center; gap: 12px; flex: none; }
+    .home-empty { padding: 48px 0; text-align: center; color: var(--text-3); }
+    .home-empty-icon { width: 52px; height: 52px; margin: 0 auto 14px;
+                       border-radius: var(--r-md); background: var(--accent-weak);
+                       color: var(--accent-ink); display: flex; align-items: center;
+                       justify-content: center; }
+    .home-empty-copy { font-size: 14px; font-weight: 500; line-height: 1.6; }
+    /* 브랜드 면 위에서는 흰 글자다 — .tile-h 가 var(--text) 를 박아 두어서
+       .tile.crit 의 color:#fff 상속을 덮는다. */
+    .tile.crit .tile-h { color: #fff; }
+    .tile-sub { font-size: 12px; line-height: 1.6; color: var(--text-3); }
+    /* 검토 방법은 기준 타일과 같은 편집형 언어를 쓰되, 구조가 아니라 순서를
+       말한다. 큰 4와 네 개의 열만 남기고 원형 번호, 점선, 퍼지는 링은 걷어낸다. */
+    .flow-editorial { display: grid; grid-template-columns: 88px minmax(0, 1fr);
+                      column-gap: 18px; align-items: stretch; min-height: 132px;
+                      margin-top: 4px; }
+    .flow-figure { display: flex; flex-direction: column; justify-content: center;
+                   padding-right: 16px; border-right: 1px solid var(--line); }
+    .flow-figure-number { font-family: var(--font-display); font-size: 48px;
+                          font-weight: 700; line-height: 1; letter-spacing: -.07em;
+                          color: var(--accent); font-variant-numeric: tabular-nums; }
+    .flow-figure-label { margin-top: 10px; font-size: 11px; font-weight: 600;
+                         line-height: 1.4; color: var(--text-3); }
+    .flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+            align-items: stretch; min-width: 0; gap: 0 24px; }
+    .flow-step { min-width: 0; padding: 10px 0 8px; }
+    /* 단계 머리는 점 + 번호 + 레일이다. 세로 구분선 대신 각 열이 이어져
+       1→2→3→4 가 한 줄의 파이프라인으로 읽힌다. 레일은 경계선 톤이라 조용하다.
+       (단계마다 아이콘 칩을 달아 봤다가 뺐다 — 같은 아이콘이 나브·다른 화면에서
+       다른 뜻으로 쓰여 겹쳤고, 누를 수 없는 단계가 호버에 반응하는 것도
+       어색했다. 2026-08-14) */
+    .flow-n { display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+              font-family: var(--font-display); font-size: 12px; font-weight: 700;
+              line-height: 1; letter-spacing: .04em; color: var(--accent-ink);
+              font-variant-numeric: tabular-nums; }
+    .flow-n::before { content: ""; flex: none; width: 6px; height: 6px;
+                      border-radius: 999px; background: var(--accent); }
+    .flow-n::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+    /* 레일은 단계와 같은 박자로 왼쪽에서 그려진다 — 순서를 말하는 유일한
+       연출이라 flowStepReveal 의 .32s 를 그대로 나눠 쓴다. */
+    .flow-step.flow-enter .flow-n::after {
+      transform-origin: left center;
+      animation: railDraw .32s var(--ease-out) var(--flow-delay, 0ms) both;
+    }
+    @keyframes railDraw { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+    .home-layout .flow-title { font-family: var(--font-display); font-size: 15px;
+                              font-weight: 700; line-height: 1.4;
+                              letter-spacing: -.025em; color: var(--home-title); }
+    .flow-desc { margin-top: 6px; font-size: 11px; font-weight: 500;
+                 line-height: 1.4; color: var(--text-3); }
+    /* 순서를 설명하는 최초 진입에만 60ms 간격을 둔다. 선을 그리거나 링을
+       터뜨리지 않고, 각 열이 제자리에서 5px 올라오는 정도로 끝낸다. */
+    .flow-step.flow-enter {
+      animation: flowStepReveal .32s var(--ease-out) var(--flow-delay, 0ms) both;
+    }
+    @keyframes flowStepReveal {
+      0% { opacity: 0; transform: translate3d(0, 5px, 0); }
+      100% { opacity: 1; transform: translate3d(0, 0, 0); }
+    }
+    @media (max-width: 1100px) {
+      .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow-step:nth-child(n+3) { border-top: 1px solid var(--line-2); }
+    }
+    @media (max-width: 720px) {
+      .flow-editorial { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+      .flow-figure { flex-direction: row; align-items: flex-end; justify-content: flex-start;
+                     gap: 12px; padding: 2px 0 16px; border-right: none;
+                     border-bottom: 1px solid var(--line); }
+      .flow-figure-label { margin: 0 0 2px; }
+      .flow { grid-template-columns: minmax(0, 1fr); }
+      .flow-step { padding: 14px 0; }
+      .flow-step:not(:first-child) { border-top: 1px solid var(--line-2); }
+      .home-tile-meta { display: none; }
+      .history-row-main { gap: 10px; }
+      .history-row-tail { gap: 6px; }
+      .hrow .history-row-arrow { display: none; }
+      .hrow .history-count { font-size: 11px; }
+    }
+    /* 큰 통계 숫자만 800(ExtraBold) — Wanted 에만 있는 무게라 숫자가 제목과
+       다른 목소리를 낸다. 작은 글씨는 600 이 상한(제일 작은 게 제일 굵으면 안 된다). */
+    .tile-num { font-size: 28px; font-weight: 800; color: var(--text);
+                letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1; }
+
+    @media (hover: hover) and (pointer: fine) {
+      .qs:hover .qs-arrow { opacity: 1; transform: translateX(3px);
+                            border-color: var(--accent-ink); background: var(--accent); color: #fff; }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    
+    /* 스크롤바. 색은 토큰이어야 한다 — #D1D5DB 를 박아 두면 다크에서 어두운
+       바탕 위에 밝은 회색 막대가 남아 화면에서 제일 밝은 것이 스크롤바가 된다.
+       --line 계열을 쓰면 테마마다 알아서 뒤집힌다. */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; border: 2px solid var(--bg); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+    * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+    button { font-family: inherit; }
+    /* 브랜드 포인트 서체. 긴 글을 읽히는 본문 서체가 아니라 화면의 방향을 짧게
+       알리는 18px 이상 한글 대표 제목용이다. 세부 데이터·버튼·폼 라벨,
+       작은 카드·섹션 제목은 계속 Wanted Sans를 쓴다. */
+    .headline { font-family: var(--font-display); }
+    /* 영문 워드마크는 포인트 서체의 개성을 덜어 제품 UI와 한 가족으로 보이게 한다. */
+    .brand-wordmark { font-family: var(--font-body); font-weight: 800;
+      letter-spacing: -.035em;
+    }
+    .mono { font-variant-numeric: tabular-nums; }
+    /* micro labels — small, uppercase, wide tracking (Linear/Vercel signature) */
+    .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+
+    /* app frame — app.js sets zoom + width to fill the viewport */
+    .dr-app { height: 800px; display: flex; background: var(--bg); overflow: hidden; color: var(--text); }
+
+    /* 앱 셸의 두 머리줄은 높이만 맞춘다. 선까지 이어 붙이면 사이드바의 경계와
+       만나 딱딱한 십자 격자가 된다. 사이드바는 선 대신 옅은 오른쪽 음영으로 면을
+       나누고, 가로선은 작업 영역의 전역 헤더에만 둔다. */
+    .sidebar-brand, .app-header { height: 60px; min-height: 60px; flex: none; }
+    .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 18px; }
+    .app-sidebar { position: relative; z-index: 2; box-shadow: var(--sidebar-shadow); }
+    .app-header { display: flex; align-items: center; justify-content: space-between;
+                  padding: 0 24px; border-bottom: 1px solid var(--line); background: var(--bg); }
+    .header-profile { display: flex; align-items: center; gap: 10px; cursor: pointer;
+                      padding: 4px 8px; border-radius: var(--r-md);
+                      transition: background .15s ease-out; }
+    .header-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-surface);
+                     color: #fff; display: flex; align-items: center; justify-content: center;
+                     font-size: 12px; font-weight: 600; }
+    /* 헤더와 열린 프로필 메뉴의 이니셜은 같은 사용자 표식이다. 메뉴 쪽만
+       --accent-weak를 쓰면 특히 다크에서 반투명 상태 칩처럼 보여 둘 다 불투명
+       브랜드 면으로 맞춘다. */
+    .profile-menu-avatar { width: 36px; height: 36px; border-radius: 50%;
+                           background: var(--accent-surface); color: #fff;
+                           display: flex; align-items: center; justify-content: center;
+                           font-size: 14px; font-weight: 700; flex: none; }
+
+    /* 사이드바에서 여는 주요 화면은 같은 시작선·폭·세로 리듬을 쓴다. 화면마다
+       padding과 max-width를 다시 정하면 이동할 때 내용이 좌우로 흔들린다. */
+    .page-shell { height: 100%; box-sizing: border-box; padding: 20px 24px 32px;
+                  overflow: auto; }
+    /* 좌측 메뉴에서 바로 여는 최상위 화면. 중복 홈 링크 없이도 제목이 헤더에
+       달라붙지 않도록 홈의 기본 시작 여백과 같은 36px을 확보한다. */
+    .page-shell-primary { padding-top: 36px; }
+    .page-container { width: 100%; max-width: 1180px; margin: 0 auto; }
+    .page-stack { display: flex; flex-direction: column; gap: 18px; }
+
+    /* 홈은 내용이 화면보다 짧을 때 남는 높이가 전부 아래로 몰리지 않게 한다.
+       카드를 억지로 늘리는 대신 콘텐츠 묶음을 살짝 위쪽 중앙에 두고, 내용이
+       길어지면 min-height가 자연스럽게 늘어나 평소처럼 위에서 아래로 스크롤된다. */
+    .home-scroll { height: 100%; overflow-x: hidden; overflow-y: auto;
+                   background: var(--bg); position: relative; }
+    .home-layout { position: relative; z-index: 1; min-height: 100%; box-sizing: border-box;
+                   max-width: 1360px; margin: 0 auto; padding: 36px 24px 48px;
+                   display: flex; flex-direction: column; justify-content: center; }
+    /* 홈 인사는 업무 화면의 첫 문장이다. 캐릭터 대신 같은 선형 아이콘 체계의
+       작은 펼친 손만 붙여, 단정함을 해치지 않는 정도로 친근함을 남긴다. */
+    .home-greeting { margin-bottom: 18px; }
+    .home-greeting-copy { min-width: 0; }
+    .home-greeting-title { display: flex; align-items: center; gap: 8px;
+                           margin: 0 0 4px; font-size: 22px; font-weight: 500;
+                           line-height: 1.2; letter-spacing: -.035em; color: var(--text);
+                           text-wrap: balance; }
+    .home-greeting-name { font-weight: 700; color: var(--accent-ink); }
+    .home-greeting-wave { display: inline-flex; align-items: center; justify-content: center;
+                          flex: none; font-size: 22px; }
+    /* 인사 손짓은 진입 때 **한 번만** 흔든다 — 손목(우하단)을 축으로 두 번.
+       업무 화면의 상시 반복은 금지지만 화면당 1회 첫 등장 연출은 로그인 계열과
+       같은 예외다. 재렌더 재생 방지는 음수 지연(views.js)이 막는다. */
+    .home-greeting-wave.wave-enter {
+      transform-origin: 72% 88%;
+      animation: waveHello .6s ease-in-out var(--wave-delay, 400ms) 1 both;
+    }
+    @keyframes waveHello {
+      0%, 100% { transform: rotate(0deg); }
+      30% { transform: rotate(16deg); }
+      65% { transform: rotate(-9deg); }
+    }
+    /* 손짓에 마우스를 올리면 다시 흔든다 — 같은 동작의 별칭 키프레임이라
+       진입 연출과 겹쳐도 재시작이 보장된다. 마우스 환경에서만. */
+    @media (hover: hover) and (pointer: fine) {
+      .home-greeting-wave:hover {
+        transform-origin: 72% 88%;
+        animation: waveAgain .6s ease-in-out 1;
+      }
+    }
+    @keyframes waveAgain {
+      0%, 100% { transform: rotate(0deg); }
+      30% { transform: rotate(16deg); }
+      65% { transform: rotate(-9deg); }
+    }
+    /* 포인터 스포트라이트. 새 도식만 두면 빛은 장식이지만, 커서 아래에서만
+       흰 선 마스코트가 드러나도록 해 작은 '숨은 캐릭터 찾기'가 된다.
+       정보층과 경쟁하지 않게 선화는 배경 z층, 실제 내용은 그 위에 둔다.
+       터치·no-hover 환경에는 발견 동작 자체가 없으므로 마크도 내지 않는다. */
+    .crit-secret-mark { display: none; }
+    @media (hover: hover) and (pointer: fine) {
+      [data-glow] { position: relative; isolation: isolate; }
+      [data-glow] > :not(.crit-secret-mark) { position: relative; z-index: 1; }
+      [data-glow]::after {
+        content: ""; position: absolute; inset: 0; border-radius: inherit;
+        z-index: 0; pointer-events: none; opacity: 0;
+        transition: opacity .2s var(--ease-out);
+        background: radial-gradient(300px circle at var(--mx, 50%) var(--my, 50%),
+                    rgba(255, 255, 255, .15), transparent 60%);
+      }
+      [data-glow]:hover::after { opacity: 1; }
+      .crit-secret-mark {
+        position: absolute; inset: 0; z-index: 0; display: block;
+        overflow: hidden; border-radius: inherit; pointer-events: none;
+        opacity: 0; transition: opacity .2s var(--ease-out);
+        -webkit-mask-image: radial-gradient(64px circle at var(--mx, 50%) var(--my, 50%),
+                            #000 0 48%, transparent 100%);
+        mask-image: radial-gradient(64px circle at var(--mx, 50%) var(--my, 50%),
+                    #000 0 48%, transparent 100%);
+      }
+      .crit-secret-mark img {
+        position: absolute; right: 24px; bottom: 92px; width: 82px; height: 82px;
+        object-fit: contain; transform: rotate(-2deg);
+      }
+      [data-glow]:hover .crit-secret-mark { opacity: .72; }
+    }
+    .home-greeting-wave svg { overflow: visible; }
+    .home-wave-shape { fill: color-mix(in srgb, var(--brand-highlight) 72%, var(--brand-primary));
+                       stroke: var(--brand-deep);
+                       stroke-width: 6; stroke-linejoin: round; }
+    .home-greeting-sub { max-width: 52ch; margin: 0; font-size: 13px; font-weight: 500;
+                         line-height: 1.6; color: var(--text-3); text-wrap: pretty; }
+    @media (max-height: 760px) {
+      .page-shell-primary { padding-top: 28px; }
+      .home-layout { justify-content: flex-start; padding-top: 28px; padding-bottom: 36px; }
+    }
+    @media (max-width: 720px) {
+      .home-layout { padding-left: 16px; padding-right: 16px; }
+      .home-greeting-title { font-size: 22px; }
+    }
+
+    /* 표면은 두 단계만 쓴다. 작업을 수행하는 패널은 얕게 띄우고, 목록·설정은
+       선으로만 묶는다. 더 강한 그림자는 모달·팝오버(--sh-3)에만 남긴다. */
+    .setup-panel, .surface-work { background: var(--panel); border: 1px solid var(--line);
+                                 border-radius: var(--r-lg); padding: 24px;
+                                 box-shadow: var(--sh-1); }
+    .surface-list { background: var(--panel); border: 1px solid var(--line);
+                    border-radius: var(--r-lg); box-shadow: none; overflow: hidden; }
+
+    /* 업로드 셋업 세 화면의 공통 작업면. 페이지 제목은 밖에, 실제 선택과 실행은
+       이 한 면 안에 둬 카드 제목과 페이지 제목의 위계를 섞지 않는다. */
+    .setup-context { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .setup-context-row { display: grid; grid-template-columns: 176px minmax(0, 1fr) auto;
+                         gap: 18px; align-items: center; }
+    .setup-section-title { margin: 0; font-family: var(--font-body); font-size: 15px;
+                           line-height:1.4; font-weight: 600; letter-spacing: -.3px;
+                           color: var(--text); }
+    .setup-section-sub { margin: 4px 0 0; font-size: 12px; line-height:1.6; color: var(--text-3); }
+
+    /* sidebar nav */
+    /* 모서리는 --r-md(12px). 채운 항목은 면적이 있어서 8px 면 각져 보인다 —
+       참고안(bentogrid_brown)의 선택 항목도 이 정도로 둥글다. hover 면도 같은
+       값을 써야 마우스를 올렸을 때 모양이 안 바뀐다. */
+    .nav { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+           border-radius: var(--r-md); cursor: pointer;
+           color: var(--text-2); font-size: 13px; font-weight: 500;
+           transition: background .15s ease-out, color .15s ease-out; }
+    /* 중립 클릭 면의 단일 계약. 프로필·사이드바·문서 행은 같은 색, 같은 속도,
+       같은 12px 곡률을 쓴다. 컴포넌트별 규칙에서 배경을 다시 정하지 않는다. */
+    .nav:hover,
+    .header-profile:hover, .header-profile.on,
+    .hrow:hover, .hrow-flush:hover { background: var(--state-hover-neutral); }
+    /* 고른 메뉴는 **채운다**(참고안 bentogrid_brown). 연한 틴트는 hover 와 세기가
+       비슷해서, 마우스를 올린 항목과 지금 보고 있는 항목이 구별되지 않았다.
+       채우면 그 둘이 다른 종류의 신호가 된다 — hover 는 면, 선택은 색. */
+    /* 채운 면은 --accent 가 아니라 --accent-surface 다(팔레트 주석 참고).
+       그림자는 참고안에도 있다 — 알약 아래가 8px 에 걸쳐 흰색으로 돌아온다.
+       없으면 색만 칠한 사각형이 바닥에 붙어 보인다. 색을 그대로 옅게 깔아
+       면과 그림자가 같은 색이 되게 한다(회색 그림자는 파란 면 밑에서 때가 낀다). */
+    .nav.on { background: var(--accent-surface); color: #fff; font-weight: 600;
+              box-shadow: 0 2px 6px rgba(var(--accent-rgb), .28); }
+    .nav.on:hover { background: var(--accent-surface); }
+
+    /* 지적 카드. 인라인 스타일로 두면 :hover 가 인라인에 밀려 안 먹는다 —
+       그래서 상태를 클래스로 뺐다(.on = 펼쳐진 카드). app.js 의 select 가
+       클래스만 갈아끼워 카드를 갱신하므로 여기 규칙이 곧 카드의 모양이다. */
+    .fcard { margin-bottom: 10px; border: 1px solid var(--line); border-radius: var(--r-md);
+             padding: 16px 16px; cursor: pointer; background: var(--panel);
+             box-shadow: var(--sh-1);
+             transition: border-color .15s var(--ease-out), background .15s var(--ease-out),
+                         box-shadow .15s var(--ease-out), transform .15s var(--ease-out); }
+    .fcard.on { border-color: var(--accent); background: var(--accent-weak);
+                box-shadow: 0 4px 12px rgba(var(--accent-rgb),.10); }
+    /* 손가락은 탭 한 번에 hover 를 흘리고 간다 — 카드가 떠올랐다가 손을 떼면
+       그대로 붙어 있어 "눌린 건가" 싶게 만든다. 움직이는 hover 는 마우스에만. */
+    @media (hover: hover) and (pointer: fine) {
+      .fcard:hover { border-color: var(--accent);
+                     box-shadow: 0 4px 12px rgba(var(--accent-rgb),.10); transform: translateY(-1px); }
+      /* 고른 카드는 hover 로 배경이 흐려지지 않게 — 어디가 선택됐는지 잃지 않는다. */
+      .fcard.on:hover { background: var(--accent-weak); transform: none; }
+    }
+    /* 카드의 형광펜 번호 칩. 누르면 그 번호 위치로 문서가 움직이는 **버튼**인데,
+       모양이 여느 뱃지와 같아 눌린다는 것을 알 길이 없었다 — 클릭되는 것
+       ([data-act])만 hover 에서 차오르고 떠올라 버튼임을 말한다. */
+    .nchip { display: inline-flex; align-items: center; font-variant-numeric: tabular-nums;
+             font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: var(--r-sm);
+             background: var(--accent-weak); color: var(--accent-ink); }
+    .nchip[data-act] { cursor: pointer;
+                       transition: background .15s var(--ease-out), color .15s var(--ease-out),
+                                   transform .15s var(--ease-out); }
+    @media (hover: hover) and (pointer: fine) {
+      .nchip[data-act]:hover { background: var(--accent); color: #fff; transform: translateY(-1px); }
+    }
+    .nchip[data-act]:active { background: var(--accent); color: #fff; transform: translateY(0); }
+    /* 지적 문장. 정상은 한두 문장이고 그래서 600 이 맞다 — 카드에서 제일 먼저
+       읽히는 줄이다. 그런데 모델이 판단 과정을 통째로 쏟을 때가 있다(실제로
+       "그러나/하지만/반면" 으로 결론을 네 번 뒤집는 15문장짜리가 나왔다).
+       그걸 반굵은 글씨로 전부 펼치면 목록이 무너지고, 옆 카드들이 안 보인다.
+       **자르지 않고 접는다** — 접힌 카드는 세 줄만, 누르면 전문이 문단으로
+       읽힌다(그래서 펼친 쪽은 500 이다. 문단을 600 으로 두면 눈이 쉴 데가 없다).
+       코드로 지우지 않는 이유: 인용이 검증된 진짜 지적일 수 있고, 결론이 뒤에
+       올 때가 있어 앞을 자르면 결론이 날아간다. 길이는 화면이 다루고, 길이가
+       나오는 원인은 프롬프트가 다룬다(agent_quality/consistency.py). */
+    .fmsg { font-size: 14px; line-height: 1.6; color: var(--text); font-weight: 600; }
+    .fcard:not(.on) .fmsg { display: -webkit-box; -webkit-box-orient: vertical;
+                            -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+    .fcard.on .fmsg { font-weight: 500; }
+
+    /* 카드 안의 텍스트 버튼(수정안 만들기·복사). 테두리가 없어 눌리는 것인지
+       읽기 어려우므로 hover 로 눌림을 알린다. */
+    .linkbtn { font-size: 12px; font-weight: 600; color: var(--accent-ink); background: none;
+               border: none; cursor: pointer; padding: 6px 10px; border-radius: var(--r-sm);
+               transition: background .15s, color .15s; }
+    .linkbtn:hover { background: var(--state-hover-brand); }
+    .linkbtn:active { transform: translateY(1px); }
+    .hover-accent { transition: color .2s; }
+    .hover-accent:hover { color: var(--accent-ink) !important; }
+
+    /* PDF 뷰어 도구. 작은 헤더 안에서 늘 보이는 보조 동작이라 평소에는 조용히
+       두고, 포인터가 올라왔을 때만 옅은 브랜드 면으로 눌리는 곳을 보여 준다.
+       형광펜의 켜짐 상태(aria-pressed)는 hover 보다 오래 가는 선택 표시다. */
+    .viewer-tool {
+      transition: background .15s var(--ease-out), color .15s var(--ease-out),
+                  border-color .15s var(--ease-out), box-shadow .15s var(--ease-out),
+                  transform .1s var(--ease-out);
+    }
+    .viewer-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (hover: hover) and (pointer: fine) {
+      .viewer-tool:hover {
+        background: var(--state-hover-brand) !important;
+        color: var(--accent-ink) !important;
+        box-shadow: inset 0 0 0 1px var(--accent-weak);
+      }
+      .viewer-mark-tool[aria-pressed="true"]:hover {
+        background: var(--accent-weak) !important;
+        border-color: var(--accent) !important;
+        box-shadow: inset 0 0 0 1px var(--accent-weak);
+      }
+    }
+    /* hover 와 active 가 동시에 걸리므로 active 를 뒤에 둔다. */
+    .viewer-tool:active { transform: translateY(1px); }
+
+    /* 내려받기 드롭다운. 예전엔 항목마다 색이 달라(accent/text-2/text-3) 무엇이
+       더 중요한지가 아니라 그냥 들쭉날쭉해 보였고, hover 도 없어 눌리는지 몰랐다.
+       색은 하나로 두고, 강조는 아이콘 칩으로만 준다. */
+    .mi { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+          font-size: 13px; font-weight: 600; color: var(--text); background: none;
+          border: none; cursor: pointer; text-align: left; transition: background .15s; }
+    .mi:hover:not(:disabled) { background: var(--state-hover-neutral); }
+    .mi:disabled { opacity: .55; cursor: default; }
+    /* 아이콘 칩 — 여기만 브랜드색을 쓴다. 어느 항목이 '문서'인지 눈으로 구분된다. */
+    .mi-ico { flex: none; width: 26px; height: 26px; border-radius: var(--r-sm); display: flex;
+              align-items: center; justify-content: center;
+              background: var(--accent-weak); color: var(--accent-ink); }
+    .mi-sub { font-size: 11px; font-weight: 500; color: var(--text-3); margin-top: 2px; }
+    /* 하단 데이터 포맷(JSON·MD·CSV)은 부가 항목이라 한 단계 작게. */
+    .mi-mini { flex: 1; padding: 10px 8px; font-size: 12px; font-weight: 600;
+               color: var(--text-2); background: none; border: none; cursor: pointer;
+               border-radius: var(--r-sm); transition: background .15s, color .15s; }
+    .mi-mini:hover { background: var(--state-hover-neutral); color: var(--text); }
+
+    /* 접힌 "검토 결과" 레일. 예전엔 400px 패널의 카드 스타일을 그대로 48px 로
+       줄여 써서, 카드 껍데기(사방 둥근 모서리·큰 그림자)만 남아 찌그러진
+       카드처럼 보였다. 오른쪽 가장자리에 붙은 탭으로 두면 "패널이 밀려나
+       있다"로 읽힌다. */
+    .rail { width: 44px; flex: none; cursor: pointer;
+            background: var(--panel); border: 1px solid var(--line); border-right: none;
+            border-radius: var(--r-md) 0 0 var(--r-md); box-shadow: -4px 0 16px rgba(0,0,0,.05);
+            display: flex; flex-direction: column; align-items: center; gap: 14px;
+            padding: 14px 0; overflow: hidden; transition: background .15s; }
+    .rail:hover { background: var(--state-hover-neutral); }
+    .rail:hover .rail-ico { color: var(--accent-ink); border-color: var(--accent); }
+    .rail-ico { flex: none; width: 26px; height: 26px; display: flex; align-items: center;
+                justify-content: center; border: 1px solid var(--line);
+                border-radius: var(--r-sm); color: var(--text-3);
+                transition: color .15s, border-color .15s; }
+    /* 세로쓰기에서 text-orientation 기본값(mixed)은 한글만 바로 세우고 숫자·라틴은
+       90도 눕힌다. 그래서 "검토 결과 16건"의 16만 옆으로 누워 읽기 어색했다.
+       upright 로 두면 숫자도 바로 선다. */
+    .rail-label { writing-mode: vertical-rl; text-orientation: upright;
+                  font-weight: 700; font-size: 13px;
+                  color: var(--text-2); letter-spacing: .02em; }
+
+    /* step tabs — active gets a 2px underline.
+       탭은 지금 보는 섹션의 제목이기도 하다. 13px·600(활성)은 카드 본문(14px·600)
+       보다 약해 제목으로 안 읽혔다 — 굵기 사다리(무게는 크기와 같은 방향)를
+       지키며 세우려면 크기부터 올린다: 14px, 활성만 700. */
+    .tab { position: relative; font-size: 14px; font-weight: 500; color: var(--text-3); padding: 6px 2px; cursor: pointer;
+           border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; }
+    .tab:hover { color: var(--text-2); }
+    .tab.on { color: var(--accent-ink); font-weight: 700; border-bottom-color: var(--accent-ink); }
+
+    /* interactive card (checklist, compare docs) */
+    .pick { cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s; }
+    .pick:hover { border-color: var(--accent-ink); box-shadow: var(--sh-2); }
+
+    /* table row */
+    .row { cursor: pointer; transition: background .15s; }
+    .row:hover { background: var(--state-hover-neutral); }
+
+    /* 폴더 검토의 필드 대조 행. 행 전체가 상세를 여는 손잡이라 hover도 행 전체에
+       준다. 펼친 상세는 옅은 하늘색 면으로 묶어, 단순히 다음 행이 이어진 것으로
+       보이지 않게 한다. 세로 강조선은 내용보다 먼저 보여 쓰지 않는다. */
+    .case-matrix-row { display: flex; align-items: center; cursor: pointer;
+                       border-top: 1px solid var(--line-2);
+                       transition: background .15s var(--ease-out); }
+    .case-matrix-row:focus-visible { outline: 2px solid var(--accent);
+                                     outline-offset: -2px; }
+    .case-matrix-row.is-open { background: var(--panel); }
+    .case-matrix-disclosure { flex: none; font-size: 10px; color: var(--text-3); }
+    .case-matrix-row.is-open .case-matrix-disclosure { color: var(--accent-ink);
+                                                       font-weight: 700; }
+    @media (hover: hover) and (pointer: fine) {
+      .case-matrix-row:hover { background: var(--state-hover-neutral); }
+      .case-matrix-row.is-open:hover { background: var(--state-hover-neutral); }
+    }
+    .case-matrix-detail { margin: 4px 10px 10px; padding: 10px 14px 12px 22px;
+                          border: 1px solid var(--line-2);
+                          border-radius: var(--r-md);
+                          background: var(--accent-weak); font-size: 12px;
+                          color: var(--text-2); }
+    .case-matrix-detail-head { display: flex; align-items: center; gap: 8px;
+                               margin-bottom: 6px; }
+    .case-matrix-detail-title { flex: none; font-size: 12px; font-weight: 700;
+                                color: var(--text); }
+    .case-matrix-detail-reason { min-width: 0; font-size: 11px; line-height: 1.4;
+                                 color: var(--text-3); }
+
+    /* small toggle chips */
+    .chip { cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+    .chip:hover { filter: brightness(.985); }
+
+    /* 검토 기준 화면(공통·팀별 층). 접두사가 .crit- 가 아니라 .clay- 인 이유는
+       홈의 기준 타일이 이미 .crit-note · .crit-scope 를 쓰고 있어서다 — 같은
+       이름을 다시 정의하면 나중 규칙이 이겨 홈 타일의 흰 글씨가 조용히 죽는다.
+       (state.clayers 에서 따왔다.)
+
+       예전엔 인라인 스타일뿐이라 hover 가 하나도 없었고, 여닫힘을 "펼치기 ▼"
+       라는 **글자로** 적어 뒀다 — 눌리는 줄인지 읽는 줄인지 구별할 길이 없었다.
+       상태는 클래스로, 신호는 면과 회전으로 준다(.fcard·.hrow 와 같은 계약). */
+
+    /* 층 머리는 **제목이지 목록 줄이 아니다.** 그래서 hover 도 아래 항목 줄과
+       다른 것을 쓴다 — 머리는 **테두리**가 서고(제목 블록이 통째로 눌린다는 뜻),
+       항목 줄은 **면**이 깔린다(읽는 자리). 같은 회색이 두 위계에 다 깔려 있어
+       "왜 여기가 헤더인지"가 안 보였다.
+
+       여백은 카드가 아니라 **머리와 목록이 각자** 든다. 카드가 padding 을 들고
+       머리를 음수 margin 으로 끌어내던 때는, 머리의 hover 테두리가 카드 안쪽
+       어중간한 자리(좌우 12px 안쪽)에 그려져 "카드보다 살짝 좁은 네모"가 떴다.
+       지금은 머리의 바깥면이 곧 카드의 안쪽면이라 테두리가 카드 모서리에
+       딱 맞는다 — margin:-1px 로 카드 선 위를 덮으므로 두 줄로도 안 보인다.
+       테두리 자리는 늘 비워 둔다(transparent) — hover 때 생기면 1px 씩 밀린다.
+       두께는 카드와 같은 1px 이고, 대신 홈 빠른 시작 타일(.tile.act)과 같은
+       계열의 옅은 브랜드 그림자를 깐다 — 굵기로 소리치지 않고 "떠오른다"로
+       말한다. 떠오르는 쪽(transform)은 안 쓴다: 이 머리는 카드 **안에** 박힌
+       블록이라 혼자 움직이면 카드에서 떨어져 나온 것처럼 보인다. */
+    .clay-card { background: var(--panel); border: 1px solid var(--line);
+                 border-radius: var(--r-lg); }
+    .clay-head { display: flex; align-items: center; gap: 12px; cursor: pointer;
+                 padding: 16px 20px; margin: -1px -1px 0;
+                 border: 1px solid transparent;
+                 border-radius: var(--r-lg) var(--r-lg) var(--r-md) var(--r-md);
+                 transition: border-color .15s var(--ease-out), box-shadow .2s var(--ease-out),
+                             color .15s var(--ease-out); }
+    .clay-head:hover { border-color: var(--accent);
+                       box-shadow: 0 8px 22px rgba(var(--accent-rgb), .10); }
+    /* 펼친 층의 목록. 머리 아래 실선과 **왼쪽 레일**이 "여기부터 열린 것"을
+       말한다 — 없으면 카드가 그냥 길어진 것처럼 보인다.
+       면을 안 쓰는 이유: 펼친 기준 본문(.clay-note)이 이미 --bg 로 파여 있다.
+       목록에도 면을 깔면 그 면이 같은 --bg 라(팔레트에 그 사이 단이 없다)
+       본문 패널의 경계가 통째로 사라진다. 바깥은 선, 안쪽은 면 — 선과 면은
+       서로 안 먹는다.
+       레일은 머리 글자와 같은 20px 에 선다. **가로선과 같은 선이어야 한다** —
+       1px · --line-2 · 둥근 끝 없음. 두께도 색도 끝 모양도 다르면 한 경계의
+       두 변이 아니라 서로 다른 물건 둘이 놓인 것처럼 보인다. 지금은 둘이
+       모서리에서 만나 열린 자리를 감싸는 하나의 꺾인 선이다.
+       소제목의 브랜드 막대(.clay-group::before)와 헷갈릴 일도 이걸로 없어진다 —
+       저쪽은 3px 브랜드색, 이쪽은 1px 경계선이다. */
+    .clay-items { position: relative; padding: 2px 12px 14px 30px;
+                  border-top: 1px solid var(--line-2); }
+    .clay-items::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 16px;
+                          width: 1px; background: var(--line-2); }
+    .clay-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* 층 이름. 아래 메타 줄(12px)보다 한 단계만 크게 세운다. 18px은 공통 기준·
+       팀 기준·체크리스트 카드가 페이지 제목처럼 보여 목록 안에서 지나치게 컸다.
+       15px/700이면 카드 머리 계층은 남기면서 주변 UI와 균형을 맞춘다.
+       (16px 로 잡았다가 15 로 내렸다 — 글자 사다리에 16 이 없다. 사다리는
+       15 다음이 바로 18 이고, 그 18 이 위에 적은 이유로 이미 탈락했다.)
+       Gmarket(--font-display)도 대 봤는데 목록 위에서 어색했다. 그 서체는
+       페이지 제목처럼 혼자 서는 자리의 것이고, 여기는 칩·메타·항목 줄이 다
+       Wanted 인 블록의 머리다 — 한 덩어리 안에서 서체까지 갈리면 붙어 있는
+       글씨로 안 보인다. 팔레트 주석의 "작은 UI 까지 Gmarket 을 번지게 하지
+       않는다"와 같은 이유다. */
+    .clay-name { font-size: 15px; font-weight: 700;
+                 line-height: 1.4; letter-spacing: -.02em; color: var(--text);
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                 transition: color .15s var(--ease-out); }
+    .clay-head:hover .clay-name { color: var(--accent-ink); }
+    /* 여닫이 화살표. 홈 빠른 시작의 .qs-arrow 와 같은 계약이다 — 평소에는 자리만
+       지키고 조용히 있다가, 머리에 마우스를 올리면 색을 채운다. 같은 squircle
+       계열(10px)로 두어 두 화면의 "이걸 누르면 간다/열린다"가 같은 물건으로
+       읽히게 한다.
+       .qs-arrow 는 hover 에 translateX 를 얹지만 여기는 안 얹는다 — 이 화살표는
+       열림 상태를 rotate(180deg) 로 말하고 있어서, 한 요소의 transform 자리를
+       두 뜻이 나눠 쓸 수 없다. */
+    .clay-chev { flex: none; width: 28px; height: 28px; border-radius: 10px;
+                 display: flex; align-items: center; justify-content: center;
+                 border: 1px solid transparent; background: transparent;
+                 color: var(--text-3); opacity: .58;
+                 transition: transform .2s var(--ease-out), opacity .2s ease-out,
+                             background .2s ease-out, color .15s ease-out,
+                             border-color .2s ease-out; }
+    .clay-head[aria-expanded="true"] .clay-chev { transform: rotate(180deg); }
+    /* 손가락은 탭 한 번에 hover 를 흘리고 간다 — 채워진 파란 상자가 눌린 채로
+       굳지 않게 마우스에만 건다(.qs-arrow 와 같은 게이트). */
+    @media (hover: hover) and (pointer: fine) {
+      .clay-head:hover .clay-chev { opacity: 1; background: var(--accent); color: #fff;
+                                    border-color: var(--accent-ink); }
+    }
+    /* 층 이름표(공통·팀별). 알약이라 글자를 우겨넣지 않는다. */
+    .clay-scope { flex: none; font-size: 11px; font-weight: 600; line-height: 1.4;
+                  letter-spacing: .06em; padding: 4px 10px; border-radius: var(--r-xl);
+                  background: var(--accent-weak); color: var(--accent-ink); }
+    /* 머리 아래 메타 줄. 숫자만 한 단 굵게 세운다 — 여기서 제일 먼저 읽혀야 하는
+       것은 "몇 개"다. 작은 글씨의 굵기 상한은 600 이다(팔레트 주석). */
+    /* 세 섹션(공통·팀별·올린 체크리스트)의 카드가 **같은 높이로** 선다. 높이를
+       정하는 것은 이름 아래 메타 줄인데, 층 카드는 거기에 칩(≈26px)이 들고
+       체크리스트 카드는 글자(≈17px)만 든다 — 그대로 두면 카드마다 높이가
+       달라 목록이 흔들려 보인다. 최소 높이를 칩 쪽에 맞춘다. */
+    .clay-metarow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+                    margin-top: 6px; min-height: 26px; }
+    .clay-meta { font-size: 12px; font-weight: 500; line-height: 1.4; color: var(--text-3); }
+    .clay-meta b { font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+    /* 항목 줄. 상세(note)는 접힌 채 두 줄만 — 기준 본문은 열 줄 넘는 것이 흔해서
+       다 펼치면 층 하나가 화면을 삼킨다. 누르면 전문과 출처·검사기가 열린다.
+       (.fmsg 의 3줄 접기와 같은 방식이다.) */
+    /* 접힌 줄은 제목 한 줄이다. 본문(note)이 있는 줄만 펴지고, 그 줄만 화살표를
+       단다 — 눌림 여부가 데이터에 숨어 있으면 변덕으로 보이지만 손잡이가 보이면
+       규칙으로 읽힌다(views.js criteriaItemRow 주석). */
+    .clay-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 8px;
+                border-top: 1px solid var(--line); border-radius: var(--r-sm); }
+    .clay-row.is-fold { cursor: pointer; transition: background .15s var(--ease-out); }
+    .clay-row.is-fold:hover { background: var(--state-hover-neutral); }
+    .clay-row.is-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    /* 줄의 손잡이. 층 머리의 것(.clay-chev)보다 조용하다 — 이건 목록 안의
+       보조 동작이지 이 블록의 주인이 아니다. 그래서 면을 안 채우고 색만 든다. */
+    /* 줄의 검사 방식 칩. 제목 줄에 눈높이를 맞춘다(칩이 제목보다 크다). */
+    .clay-how { flex: none; margin-top: -2px; }
+    .clay-rowchev { flex: none; display: flex; margin-top: 2px; color: var(--text-3);
+                    opacity: .5;
+                    transition: transform .2s var(--ease-out), opacity .2s ease-out,
+                                color .15s ease-out; }
+    .clay-row.is-fold:hover .clay-rowchev { opacity: 1; color: var(--accent-ink); }
+    .clay-row[aria-expanded="true"] .clay-rowchev { transform: rotate(180deg); opacity: 1; }
+    .clay-no { flex: none; min-width: 34px; padding-top: 2px; font-size: 11px;
+               font-weight: 500; line-height: 1.6; color: var(--text-3);
+               font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .clay-title { font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--text); }
+    /* 펼쳐진 기준 본문. 요약 줄과 **같은 바닥에 같은 여백으로** 놓으면 줄이
+       그냥 길어진 것처럼 보인다 — 방금 열린 것이라고 말하지 못한다. 한 단
+       들어간 옅은 면에 얹어 "요약 아래 드러난 내용"으로 읽히게 한다
+       (disclosure 의 관례다). 면은 --bg 라 패널보다 한 단 낮게 파인다.
+       본문은 yaml 에서 번호 매긴 여러 줄로 오므로 줄바꿈을 살린다(pre-wrap) —
+       자르지도 않는다. 여기는 "이 기준이 무엇을 요구하나"를 읽는 자리다. */
+    .clay-note { margin-top: 8px; padding: 10px 12px; border-radius: var(--r-sm);
+                 background: var(--bg); font-size: 12px; font-weight: 400;
+                 line-height: 1.6; color: var(--text-2); white-space: pre-wrap; }
+    /* 검증 대상 소제목. 줄마다 "검증 대상 형식"을 되풀이하는 대신 묶어서 목차로
+       세운다 — 종이 체크리스트가 원래 이렇게 생겼다.
+       **목차는 자기가 이끄는 줄보다 커야 한다**: 14px/700. 자간은 건드리지
+       않는다 — 한글은 자간을 벌리면 제목이 아니라 라벨로 읽힌다.
+       개수는 "형식 2" 로 붙이면 번호처럼 읽히므로 단위를 달아 뒤로 뺀다. */
+    .clay-group { display: flex; align-items: center; gap: 10px; padding: 20px 8px 8px;
+                  font-size: 14px; font-weight: 700; line-height: 1.4; color: var(--text); }
+    .clay-group:first-child { padding-top: 4px; }
+    /* 글자만 놓으면 목록 사이에 낀 또 하나의 줄로 읽힌다. 앞의 브랜드 막대가
+       "여기서 묶음이 시작한다"를 찍고, 뒤로 뻗는 실선이 그 묶음을 오른쪽 끝까지
+       그어 준다 — 종이 체크리스트의 절 구분과 같은 꼴이다. 마크업이 아니라
+       가상 요소로 그린다: 이건 내용이 아니라 구분선이다. */
+    .clay-group::before { content: ""; flex: none; width: 3px; height: 14px;
+                          border-radius: 2px; background: var(--accent); }
+    .clay-group::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+    /* 개수는 실선 **뒤**에 세운다(order) — 제목에 바로 붙으면 "형식 2" 로 읽힌다. */
+    .clay-group span { order: 1; font-size: 11px; font-weight: 500; color: var(--text-3);
+                       font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+    /* 검사 방식 뱃지. 층 머리의 요약과 항목 줄이 같은 칩을 쓴다 — 예전 요약은
+       "규칙 · 자동 12 · LLM · 자동 5" 처럼 라벨 안의 구분점과 항목 사이 구분점이
+       같아 몇 개가 무엇인지 읽히지 않았다.
+       테두리 칸을 둔 이유는 views.js HOW_TONE 주석에 있다 — 자동은 채운 칩,
+       사람 몫은 빈 칩이다. */
+    .clay-chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+                 font-size: 11px; font-weight: 600; line-height: 1.4; padding: 4px 10px;
+                 border: 1px solid transparent; border-radius: var(--r-xl); }
+    .clay-chip b { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+    /* 검사 방식 필터. 이 화면의 값어치는 "무엇이 자동이고 무엇이 사람 몫인가"라
+       그 축으로 걸러 볼 수 있어야 한다. 고른 칩만 채우고 나머지는 남긴다 —
+       숨기면 전체에서 몇 건인지가 사라진다. */
+    .clay-fchip { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+                  font-family: inherit; font-size: 11px; font-weight: 500; line-height: 1.4;
+                  color: var(--text-2); background: var(--panel);
+                  border: 1px solid var(--line); border-radius: var(--r-xl); padding: 6px 10px;
+                  transition: background .15s var(--ease-out), border-color .15s var(--ease-out),
+                              color .15s var(--ease-out); }
+    .clay-fchip:hover { border-color: var(--accent); color: var(--text); }
+    .clay-fchip.on { border-color: var(--accent); background: var(--accent-weak);
+                     color: var(--accent-ink); font-weight: 600; }
+    .clay-fchip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .clay-fchip .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+
+    /* buttons */
+    /* 버튼 글자는 줄바꿈하지 않는다 — 좁은 타일 안에서 "모두 보기" 가 "모두 보 /
+       기" 로 갈리면 손잡이가 고장난 것으로 보인다. 자리가 모자라면 옆 글자가
+       줄어들지(ellipsis) 버튼이 두 줄이 되지는 않는다. */
+    .btn { min-height: 34px; padding: 8px 14px; display: inline-flex; align-items: center;
+           white-space: nowrap;
+           justify-content: center; gap: 6px; font-family: inherit; font-size: 13px;
+           line-height: 1.2; cursor: pointer; font-weight: 600; border-radius: var(--r-sm);
+           transition: border-color .2s var(--ease-out), background .2s var(--ease-out), color .2s var(--ease-out), box-shadow .2s var(--ease-out), transform .15s var(--ease-out); }
+    /* 브랜드 면(.tile.crit 같은 파란 바닥) 위에서는 버튼이 반전된다 —
+       흰 채움 + 브랜드 잉크. 파란 면에 파란 버튼은 묻힌다. */
+    .btn-invert { background: #fff; color: var(--brand-primary); border: none; }
+    .btn-invert:hover { background: rgba(255,255,255,.88); }
+    .btn-sm { min-height: 30px; padding: 6px 12px; font-size: 12px; }
+    /* 홈의 솔리드 보조 CTA는 빠른 시작 아이콘과 같은 12px 곡률을 쓴다. */
+    /* 홈 타일 머리줄의 "모두 보기". 최근 검토와 적용 중인 기준이 같은 역할의
+       손잡이를 달고 있으므로 이름도 생김새도 같다 — 한때 기준 타일 쪽만 이름이
+       "전체 보기"였고 인라인으로 22px 높이 · 11px 글자 · 999px 알약이라, 같은
+       화면에 다른 버튼 두 종류가 있었다.
+       높이·여백·글자 크기·굵기(600)는 .btn / .btn-sm 이 지고, 여기서는 모서리만
+       맞춘다. 인라인으로 덮어쓰지 말 것 — 그게 둘이 갈렸던 원인이다. */
+    .home-see-all { border-radius: var(--r-md); }
+    /* 파란 기준 타일에서는 흰 반전색을 유지하되, 최근 검토의 솔리드 버튼과
+       같은 1px 상승·브랜드 그림자로 hover 강도를 통일한다. */
+    .btn-invert.home-see-all:hover {
+      background: rgba(255,255,255,.88);
+      box-shadow: 0 4px 12px rgba(var(--accent-rgb),.24);
+    }
+    /* 40px 높이의 주요 실행 버튼은 사이드바 메뉴 면과 같은 --r-md를 쓴다.
+       작은 보조 버튼까지 함께 둥글게 만들지 않도록 크기 변형에만 적용한다. */
+    .btn-lg { min-height: 40px; padding: 10px 22px; font-size: 14px;
+              border-radius: var(--r-md); }
+    .btn:disabled { opacity: .55; cursor: default; transform: none; }
+    .btn-primary { border: none; background: var(--accent-surface); color: #fff; box-shadow: 0 2px 4px rgba(var(--accent-rgb),.12); }
+    .btn-primary:hover { background: var(--accent-strong); box-shadow: 0 4px 12px rgba(var(--accent-rgb),.24); }
+    .btn-ghost { background: var(--panel); border: 1px solid var(--line); color: var(--text); }
+    .btn-ghost:hover { background: var(--state-hover-neutral); border-color: var(--line); box-shadow: var(--sh-2); }
+    .btn-danger { border: none; background: var(--sev-crit-fg); color: #fff; }
+    .btn-danger:hover { filter: brightness(.9); box-shadow: 0 4px 12px rgba(220,38,38,.18); }
+    .btn-danger-ghost { color: var(--sev-crit-fg); }
+    .btn-danger-ghost:hover { color: var(--sev-crit-fg); border-color: var(--sev-crit-bd); background: var(--sev-crit-bg); }
+    /* 회색 대신 브랜드 블루로 hover 하는 ghost 변형. .btn-ghost 뒤에 둬 색을 덮는다. */
+    .btn-ghost-accent:hover { background: var(--state-hover-brand); border-color: var(--accent); color: var(--accent-ink); box-shadow: 0 2px 6px rgba(var(--accent-rgb),.10); }
+    /* 버튼의 1px 상승은 마우스에만 — 터치에서는 탭한 버튼이 떠오른 채 붙는다.
+       색·그림자 hover 는 위에 남긴다: 짧아서 해가 없고, 게이트에 넣으면 터치가
+       hover 신호를 통째로 잃는다. */
+    @media (hover: hover) and (pointer: fine) {
+      .btn-primary:hover, .btn-ghost:hover, .btn-danger:hover,
+      .btn-ghost-accent:hover, .btn-invert.home-see-all:hover { transform: translateY(-1px); }
+    }
+
+    /* 누르는 순간의 반응. hover 는 "여기 눌린다"를 말하고 :active 는 "지금
+       눌렀다"를 말한다 — 둘은 다른 질문에 답한다. 이게 없으면 렌더가 끝날
+       때까지 사용자가 "먹었나?"를 혼자 판단해야 한다(제일 많이 눌리는 면이
+       지적 카드 .fcard 와 최근 검토 행 .hrow 다).
+       면에는 배경, 카드에는 축소 — 테두리도 radius 도 없는 행을 축소시키면
+       글자만 흔들린다(.hrow 가 .pick 대신 배경을 쓰는 것과 같은 이유).
+       .nav.on 과 .fcard.on 은 이미 선택 상태의 면색을 갖고 있어 뺀다. */
+    .hrow:active, .hrow-flush:active, .row:active, .nav:not(.on):active,
+    .mi:not(:disabled):active, .rail:active { background: var(--line-2); }
+    .tile.act:active, .fcard:not(.on):active, .pick:active { transform: scale(.995); }
+    .chip:active { filter: brightness(.95); }
+    /* .btn 은 여기 있어야 한다. 원래 .btn-primary/-ghost/-danger 의 :hover 보다
+       **위에** 있었고, 그 hover 들이 transform: translateY(-1px) 을 같은 특정도로
+       덮어서 주요 버튼의 누름 반응이 마우스에서는 한 번도 보인 적이 없다
+       (게다가 .btn:active 가 값만 다르게 두 벌 있었다). */
+    /* 눌림 스케일 .97 — 버튼 크기에서 눌림이 실제로 보이는 값이다(.98 은
+       모니터에 따라 안 보였다). 근거는 emil-design-eng 의 버튼 지침:
+       :active 에 scale(0.97), transform 전환 100~160ms ease-out. */
+    .btn:not(:disabled):active { transform: scale(.97); }
+
+    @media (max-width: 720px) {
+      .page-shell { padding: 16px 16px 24px; }
+      .page-stack { gap: 14px; }
+    }
+
+    /* 로그인·회원가입·비밀번호찾기의 "돌아가기". 앱 안쪽 뒤로가기(.hover-accent)와
+       달리 모달의 맨 위에 홀로 떠 있어서, 색만 바뀌면 눌리는 자리인지 모른다 —
+       배경을 깔아 버튼 크기를 눈에 보이게 하고 화살표를 왼쪽으로 민다. */
+    .backlink { display: inline-flex; align-items: center; cursor: pointer;
+                font-size: 14px; font-weight: 600; color: var(--text-3);
+                padding: 8px 12px; margin: 0 0 16px -12px; border-radius: var(--r-sm);
+                transition: color .15s, background .15s; }
+    .backlink:hover { color: var(--accent-ink); background: var(--state-hover-brand); }
+    /* :active 는 자기 :hover 뒤에 와야 이긴다(같은 특정도라 순서가 가른다) —
+       그래서 위 누름 반응 블록에 못 넣고 여기 둔다. .sel-opt 도 같다. */
+    .backlink:active { background: var(--line-2); }
+    .backlink svg { transition: transform .2s var(--ease-out); }
+    @media (hover: hover) and (pointer: fine) {
+      .backlink:hover svg { transform: translateX(-3px); }
+    }
+
+    /* 커스텀 셀렉트(회원가입 부서·팀). 네이티브 <select> 의 펼친 목록은 OS 가
+       그리기 때문에 모서리도 hover 색도 앱과 따로 논다 — 내려받기 메뉴(.mi)와
+       같은 모양으로 목록을 직접 그린다. 값은 wrapper 의 data-value 에 담는다. */
+    .sel { position: relative; }
+    .sel-btn { width: 100%; display: flex; align-items: center; justify-content: space-between;
+               gap: 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-md);
+               background: var(--bg); font-family: inherit; font-size: 15px; font-weight: 500;
+               color: var(--text); cursor: pointer; text-align: left;
+               transition: border-color .15s, background .15s, box-shadow .15s; }
+    .sel-btn:hover { border-color: var(--accent); }
+    .sel.open .sel-btn { border-color: var(--accent); background: var(--panel);
+                         box-shadow: 0 0 0 3px var(--accent-weak); }
+    .sel-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 아직 안 고른 상태 = placeholder. <option disabled selected> 자리다. */
+    .sel-label[data-ph] { color: var(--text-3); font-weight: 400; }
+    .sel-caret { flex: none; color: var(--text-3);
+                 transition: transform .2s var(--ease-out), color .15s; }
+    .sel.open .sel-caret { transform: rotate(180deg); color: var(--accent-ink); }
+    .sel-menu { display: none; position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; right: 0;
+                max-height: 264px; overflow: auto; padding: 6px;
+                background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
+                box-shadow: var(--sh-3); animation: fadeIn .15s ease-out; }
+    .sel.open .sel-menu { display: block; }
+    .sel-opt { width: 100%; display: flex; align-items: center; justify-content: space-between;
+               gap: 8px; padding: 10px 12px; border: none; border-radius: var(--r-sm); background: none;
+               cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600;
+               color: var(--text-2); text-align: left; transition: background .15s, color .15s; }
+    .sel-opt:hover { background: var(--state-hover-neutral); color: var(--text); }
+    .sel-opt:active { background: var(--line-2); }
+    .sel-opt[aria-selected="true"] { background: var(--accent-weak); color: var(--accent-ink); }
+    .sel-check { flex: none; visibility: hidden; color: var(--accent-ink); }
+    .sel-opt[aria-selected="true"] .sel-check { visibility: visible; }
+
+    /* 목록 행에 얹는 작은 셀렉트(반영 확인 판정). 회원가입 폼 크기 그대로 쓰면
+       한 줄에 안 들어간다. 펼친 목록은 같은 것을 쓴다 — 네이티브 <select> 는
+       그 목록을 OS 가 그려서 앱과 안 어울린다(그래서 .sel 이 있다). */
+    .sel-sm { flex: none; }
+    .sel-sm .sel-btn { width: auto; gap: 6px; padding: 6px 10px; border-radius: var(--r-sm);
+                       font-size: 12px; font-weight: 600; background: var(--panel); }
+    .sel-sm .sel-menu { left: auto; right: 0; min-width: 136px; }
+    .sel-sm .sel-opt { padding: 8px 10px; font-size: 12px; }
+
+    ::selection { background: rgba(var(--accent-rgb),.16); }
+
+    /* 키보드 포커스 링. 지적 카드·탭·칩이 tabindex 로 포커스를 받게 되면서
+       (views.js + app.js 의 Enter/Space 브리지) 브라우저 기본 링이 처음 보이게
+       됐다 — 기본값은 팔레트를 모르니 브랜드색으로 통일한다. 마우스 클릭에는
+       안 뜬다(:focus-visible). */
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* 로그인·회원가입·비밀번호찾기의 바탕. 앱의 종이색 캔버스(다크는 차콜)를 쓰고
+       큰 유기적 도형만 브랜드색으로 흘린다 — 화면 밖으로 잘려 나가야 "배경"으로
+       읽히지, 다 보이면 그림 조각이 떠 있는 것처럼 보인다.
+       색은 --accent-weak 를 그대로 쓴다. 알파를 따로 곱하면 팔레트에 없는 톤이
+       하나 생기는데, 그건 이 화면에서만 통하는 이름 없는 색이다. 이 토큰은
+       nav.on·fcard.on 같은 선택 상태가 이미 쓰는 "연한 브랜드 면"이고,
+       다크 오버라이드(.1 → .18)도 팔레트가 이미 들고 있다 — 테마별 세기를
+       여기서 정하지 않아도 되는 게 핵심이다. 더 진하게 가려면 임의로 곱하지 말고
+       팔레트에 토큰을 하나 늘리는 쪽이 맞다.
+       (--neutral-strong 은 쓰면 안 된다. 다크 오버라이드가 없어 검정 위에
+        흰 덩어리로 뜬다. --bg 는 흰 바탕에서 거의 안 보인다. 둘 다 확인했다.)
+       이미지가 아니라 CSS 라 화면이 아무리 커져도 뭉개지지 않는다 — 사진 배경이
+       겪던 해상도 문제가 여기선 아예 없다. 크기도 vw/vh 라 비율이 따라온다. */
+    .auth-canvas { background-color: var(--bg); }
+    .auth-blob { position: absolute; z-index: 0; pointer-events: none;
+                 background: var(--accent-weak); }
+    /* 모서리마다 다른 곡률을 줘야 원이 아니라 덩어리로 보인다. 비대칭이 약하면
+       그냥 찌그러진 타원 넷이 되므로 대각선끼리 크게 벌려 놓는다(72/28, 34/66 처럼).
+       종류를 섞지는 않는다 — 링이나 정원을 끼워 넣으면 배경이 아니라 낱개의
+       장식물로 읽혀서 흔한 템플릿처럼 보인다. 다양함은 '계열 안에서'만 준다. */
+    .auth-blob.b1 { top: -28vh; left: -16vw; width: 50vw; height: 70vh;
+                    border-radius: 72% 28% 63% 37% / 66% 40% 60% 34%; transform: rotate(-14deg); }
+    .auth-blob.b2 { bottom: -34vh; right: -14vw; width: 54vw; height: 76vh;
+                    border-radius: 34% 66% 30% 70% / 58% 36% 64% 42%; transform: rotate(16deg); }
+    .auth-blob.b3 { bottom: -16vh; left: 2vw; width: 30vw; height: 38vh;
+                    border-radius: 64% 36% 74% 26% / 38% 66% 34% 62%; transform: rotate(-28deg); }
+    .auth-blob.b4 { top: 1vh; right: 4vw; width: 22vw; height: 30vh;
+                    border-radius: 40% 60% 32% 68% / 70% 30% 70% 30%; transform: rotate(22deg); }
+
+    /* 애니메이션 추가: 부드럽게 호흡하고 미세하게 떠다니는 유기적인 움직임 */
+    @keyframes blobFloat {
+      0% { transform: scale(1) translate(0, 0) rotate(0deg); }
+      33% { transform: scale(1.05) translate(3vw, -2vh) rotate(3deg); }
+      66% { transform: scale(0.95) translate(-2vw, 3vh) rotate(-2deg); }
+      100% { transform: scale(1) translate(0, 0) rotate(0deg); }
+    }
+    .auth-blob { animation: blobFloat 24s ease-in-out infinite; }
+    /* b1, b2, b3, b4가 서로 다른 타이밍과 리듬으로 움직이게 하여 기계적인 느낌 제거 */
+    .auth-blob.b1 { animation-delay: 0s; animation-duration: 28s; }
+    .auth-blob.b2 { animation-delay: -5s; animation-duration: 32s; animation-direction: reverse; }
+    .auth-blob.b3 { animation-delay: -12s; animation-duration: 22s; }
+    .auth-blob.b4 { animation-delay: -8s; animation-duration: 26s; animation-direction: reverse; }
+
+    /* 파란 브랜드 면의 배경. 바깥 캔버스(.auth-blob)는 유기적인 덩어리를 쓰지만
+       여기선 **제품의 어휘**를 쓴다 — 돋보기 렌즈와 문서 면이다. 한때 바깥과 같은
+       블롭을 흰빛으로 흘리는 .brand-blob 이 있었는데, 화면에 붙인 적이 없다.
+       붙였다면 "귀여운 일러스트 로그인 템플릿"이 됐을 것이다: 배경이 제품과 무관한
+       장식물이면 어느 서비스에 갖다 붙여도 똑같이 그럴듯하다.
+
+       한 겹이던 135도 그라데이션을 방사형 셋으로 나눠 공간감만 만든다. 색은 있는
+       토큰 안에서 쓴다 — 크림 빛(위)·파우더 블루(중앙 렌즈 빛)·짙은 남색(오른쪽
+       아래 깊이). 값은 알파를 var 로 빼 놨다: 다크에서 파랑 채도와 흰 장식만
+       내리면 되고, 그라데이션 좌표를 두 벌 적지 않아도 된다. */
+    .login-brand {
+      --bp-cream:  rgba(255,251,244,.20); /* 상단 빛 */
+      --bp-powder: rgba(150,200,240,.30); /* 중앙 렌즈 빛 */
+      --bp-depth:  rgba(20,44,70,.42);    /* 우하단 깊이 */
+      --bp-scrim:  transparent;           /* 다크에서만 채도를 누르는 막 */
+      --bp-ink: 1;                        /* 흰 장식 투명도 배율 */
+      background:
+        radial-gradient(120% 90%  at 18% 6%,   var(--bp-cream)  0%, transparent 55%),
+        radial-gradient(78%  62%  at 50% 40%,  var(--bp-powder) 0%, transparent 68%),
+        radial-gradient(110% 100% at 84% 104%, var(--bp-depth)  0%, transparent 62%),
+        linear-gradient(var(--bp-scrim), var(--bp-scrim)),
+        linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-deep) 100%);
+    }
+    [data-theme="dark"] .login-brand {
+      --bp-cream:  rgba(255,251,244,.09);
+      --bp-powder: rgba(150,200,240,.14);
+      --bp-depth:  rgba(4,12,22,.62);
+      --bp-scrim:  rgba(8,17,28,.44);
+      --bp-ink: .55;
+    }
+
+    /* 여기 한때 배경용 거대 돋보기(테두리 원 + 45도 손잡이)가 있었다. 지웠다 —
+       아무도 돋보기로 못 읽고 "저 뒤의 커다란 구가 뭐냐"로 먼저 걸렸다. 배경
+       도형이 무엇인지 물어보게 만들면 그 순간 배경이 아니라 내용이다.
+       렌즈의 빛만 있으면 된다 — 위 --bp-powder 방사형이 그 일을 이미 한다.
+       실물 돋보기는 마스코트가 손에 들고 있고, 그거면 충분하다. */
+
+    /* 가장자리에서 잘려 나가는 문서 면. 히어로의 .hero-doc 과 같은 어휘(종이·본문
+       줄·형광펜)를 크게·흐리게 쓴다. 흐리게 하는 게 핵심이다 — 선명하면 배경이
+       아니라 "읽어야 할 문서" 가 되어 폼에서 눈을 뺏는다. */
+    .bp-doc { position: absolute; z-index: 0; pointer-events: none;
+              width: 208px; height: 272px; border-radius: var(--r-lg);
+              background: rgba(247,243,239,.10);
+              border: 1px solid rgba(255,255,255,.13);
+              filter: blur(2.5px); opacity: calc(.6 * var(--bp-ink));
+              animation: docDrift 26s ease-in-out infinite; }
+    .bp-doc::before { content: ""; position: absolute; inset: 30px 24px auto 24px; height: 132px;
+                      background: repeating-linear-gradient(to bottom,
+                        rgba(255,255,255,.15) 0 3px, transparent 3px 16px); }
+    .bp-doc::after { content: ""; position: absolute; left: 24px; top: 69px;
+                     width: 78px; height: 9px; border-radius: 2px;
+                     background: rgba(250,190,83,.32); }
+    .bp-doc-tl { --bp-rot: -12deg; top: -70px; left: -78px; }
+    .bp-doc-br { --bp-rot: 9deg; bottom: -84px; right: -72px; animation-delay: -13s; }
+    @keyframes docDrift {
+      0%, 100% { transform: rotate(var(--bp-rot)) translateY(0); }
+      50%      { transform: rotate(var(--bp-rot)) translateY(-10px); }
+    }
+
+    /* 배치 요소(z-index:0)는 흐름 속 글자보다 위에 그려진다 — 워드마크·슬로건이
+       도형에 덮이지 않게 명시적으로 올린다. */
+    .login-brand h1, .login-brand p, .login-brand .hero-stage { position: relative; z-index: 1; }
+    /* 660px 브랜드 면에서 40px 워드마크는 280px 마스코트와 18px 굵은 슬로건
+       사이에 묻힌다. 데스크톱만 한 단 올리고, 좁은 화면은 아래에서 40px로
+       되돌려 브랜드가 화면을 밀어내지 않게 한다. */
+    .login-brand .brand-wordmark { font-size: 48px; }
+    /* 오른쪽 폼의 시작점을 분명히 하되, 브랜드 워드마크(48px)보다는 한 단계
+       아래에 둔다. 설명·필드 라벨과의 간격은 기존 리듬을 유지한다. */
+    .login-form-title { font-size: 28px; }
+
+    /* 로그인 히어로는 드문 브랜드 접점이라 여기만 3D 깊이를 허용한다.
+       마스코트 앞뒤에 문서 두 장을 놓고, 포인터 기울기는 app.js가 최대 2도만
+       직접 건다. 로그인 이후 업무 화면에는 이 원근을 가져가지 않는다. */
+    .login-brand { perspective: 900px; }
+    .hero-stage { position: relative; display: flex; justify-content: center;
+                  align-items: flex-end; width: 300px; min-height: 280px;
+                  margin-bottom: 36px; transform-style: preserve-3d;
+                  will-change: transform; }
+    /* 실제 문서 이미지를 추가하지 않고 제품의 종이·형광펜 어휘만 추상화한다.
+       두 장 모두 최초 진입 때 한 번 제자리로 앉고 이후에는 정지한다. */
+    .hero-doc { position: absolute; z-index: 0; width: 88px; height: 116px;
+                border: 1px solid rgba(255,255,255,.52); border-radius: var(--r-md);
+                background:
+                  linear-gradient(90deg, rgba(250,190,83,.72) 0 30%, transparent 30%) 14px 25px / 38px 4px no-repeat,
+                  repeating-linear-gradient(to bottom, rgba(32,70,126,.18) 0 2px, transparent 2px 10px) 14px 44px / 60px 48px no-repeat,
+                  rgba(247,243,239,.94);
+                box-shadow: 0 16px 30px rgba(2,14,40,.18); opacity: 0;
+                backface-visibility: hidden; }
+    .hero-doc::after { content:""; position:absolute; right:9px; top:10px;
+                       width:14px; height:14px; border-radius:4px;
+                       background:rgba(76,151,214,.28); }
+    /* 안착 깊이를 -48/-64 → -26/-38 로 당겼다. 뒤로 밀려 있으면 원근 때문에
+       작아져서 "마스코트 뒤 얼룩" 이 되는데, 이 두 장은 검토할 문서 그 자체라
+       읽혀야 한다. 도착 투명도도 .92 → 1 이다 — 마스코트는 불투명한데 문서만
+       비치면 같은 장면에 있는 물건으로 안 보인다. 들어오는 자리(--doc-from)는
+       그대로 뒤에 둔다: 뒤에서 앞으로 나오는 거리가 늘어난 만큼 등장이 또렷해진다. */
+    .hero-doc-left {
+      left: -2px; top: 60px;
+      --doc-from: translate3d(34px, 18px, -72px) rotateY(20deg) rotateZ(-13deg);
+      --doc-rest: translate3d(0, 0, -26px) rotateY(16deg) rotateZ(-10deg);
+      animation: heroDocIn .8s var(--ease-out) .12s both;
+    }
+    .hero-doc-right {
+      right: -4px; top: 35px;
+      --doc-from: translate3d(-32px, 20px, -92px) rotateY(-22deg) rotateZ(14deg);
+      --doc-rest: translate3d(0, 0, -38px) rotateY(-17deg) rotateZ(10deg);
+      animation: heroDocIn .8s var(--ease-out) .2s both;
+    }
+    @keyframes heroDocIn {
+      0% { opacity: 0; transform: var(--doc-from); }
+      100% { opacity: 1; transform: var(--doc-rest); }
+    }
+    /* 발밑 접지 그림자. 배경에 공간감이 생기면서 두 겹으로는 마스코트가 면 위에
+       오려 붙인 것처럼 떴다. 가장 넓은 세 번째 겹(200px)을 더해 바닥으로
+       잦아들게 한다 — 진하게가 아니라 **넓게** 다. 상자를 300 → 440 으로 키운
+       건 그 겹이 잘리지 않게 하려는 것뿐이고, 폭 기준의 -51% 보정도 따라간다.
+       bottom 은 눈으로 정하지 말고 계산해서 넣을 것. PNG 아래쪽엔 투명 여백이
+       있어서(현 자산 login_hero 는 7.8% · 280px 기준 약 22px) 상자 바닥이 곧
+       발바닥이 아니다:
+           bottom = -(상자 높이 / 2 - 발바닥 여백)   →  78/2 - 22 = -17
+       **PNG 를 갈면 이 값도 다시 재야 한다.** 여백 비율은 자산마다 다르다
+       (직전 671×900 자산은 6.0% 였고 -27 이었다). 재는 법:
+           ffmpeg -v verbose -i x.png -vf "alphaextract,cropdetect=limit=1:round=1:skip=0" -f null -
+       한 번 틀렸다. 상자 높이만 56 → 78 로 키우고 bottom 을 -14 에 두는 바람에
+       그림자 중심이 11px 위로 올라가 마스코트 몸통 **뒤에 숨었고**, 발이 뜬 채로
+       두 번 넘어갔다. 높이를 건드리면 bottom 도 같이 건드려야 한다.
+       그리고 위치를 고친 뒤에도 안 보였다 — 코어 타원이 76px 이라 발 간격
+       (≈165px)보다 좁아 두 발 **사이에** 들어가 발등에 가려 있었다. 접지
+       그림자는 딛는 폭보다 넓어야 한다. 마스코트만 숨겨 놓고 보면 금방 안다. */
+    .hero-stage::after { bottom: -17px; left: 50%; width: 440px; height: 78px;
+      content: ""; position: absolute; z-index: 0;
+      transform: translateX(-50.7%);
+      /* 알파는 히어로를 키운 뒤 다시 잡은 값이다. zoom 은 크기를 끌고 가지만
+         **농도는 못 끌고 간다** — 같은 알파가 넓어진 면에 퍼지면서 옅어진다.
+         폭(56 → 120)은 위 주석의 발 간격 문제 때문이다. */
+      background:
+        radial-gradient(ellipse 120px 9px at 50% 50%, rgba(2,14,40,.42) 0%,
+                                                      rgba(2,14,40,.20) 54%, transparent 78%),
+        radial-gradient(ellipse 150px 19px at 50% 52%, rgba(2,14,40,.15) 0%, transparent 72%),
+        radial-gradient(ellipse 210px 30px at 50% 53%, rgba(2,14,40,.08) 0%, transparent 76%); }
+    .hero-mascot { position: relative; z-index: 1; height: 280px; width: auto;
+                   object-fit: contain;
+                   filter: drop-shadow(-4px 10px 16px rgba(3,18,48,.24));
+                   animation: heroMascotIn .8s var(--ease-out) .08s both; }
+    @keyframes heroMascotIn {
+      0% { opacity: 0; transform: translate3d(0, 14px, 18px) scale(.97); }
+      100% { opacity: 1; transform: translate3d(0, 0, 18px) scale(1); }
+    }
+    /* 돋보기 렌즈 위를 한 번만 통과하는 빛. PNG 자체의 반사를 덮지 않도록
+       투명도를 낮추고 렌즈 원 안에서만 잘라낸다.
+       **이 네 값은 마스코트 PNG 에 종속이다.** 자산을 갈면 다시 재야 한다 —
+       안 재면 빛이 유리를 벗어나 얼굴 위로 흐른다(실제로 hero3 로 갈면서
+       글린트가 렌즈보다 커지고 14px 밀렸다).
+       재는 법: PNG 에서 돋보기 링의 파랑 픽셀 bbox 를 잡아 중심·지름 비율을 얻고,
+           이미지폭 = 280 × 종횡비 · 좌여백 = (300 − 이미지폭) / 2
+           left = 좌여백 + 중심x비율 × 이미지폭 − 글린트지름/2
+           top  = 중심y비율 × 280 − 글린트지름/2
+           글린트지름 = 링 바깥지름 × 0.86   (유리는 링 안쪽이라 조금 작게)
+       현 자산(login_hero, ar 0.667 · 중심 0.349/0.380 · 지름비 0.495) 기준 값. */
+    .hero-lens-glint { position: absolute; z-index: 2; left: 82px; top: 66px;
+                       width: 80px; height: 80px; border-radius: 50%; overflow: hidden;
+                       transform: translateZ(28px); pointer-events: none; }
+    .hero-lens-glint::before { content:""; position:absolute; inset:-24%;
+      background:linear-gradient(105deg, transparent 34%, rgba(255,255,255,.34) 49%, transparent 64%);
+      animation: heroLensSweep 1s var(--ease-out) .68s both; }
+    @keyframes heroLensSweep {
+      0% { opacity: 0; transform: translateX(-100%) rotate(-8deg); }
+      24% { opacity: .7; }
+      78% { opacity: .46; }
+      100% { opacity: 0; transform: translateX(100%) rotate(-8deg); }
+    }
+    /* 히어로가 이 면의 주인공이다. 280px 로는 워드마크·슬로건과 셋이 비슷한
+       무게로 나란히 서서 "그림 하나 얹은 파란 면" 이 됐다.
+       **크기의 상한을 정하는 건 구도가 아니라 원본이다.** 1.35(378px) → 1.15(322px)
+       까지 올려 봤는데 둘 다 부담스러웠고, 부담의 정체는 구도가 아니라 화질이었다:
+       3D 렌더 특유의 물렁한 가장자리가 키울수록 그대로 드러난다.
+       바꾸려면 zoom 을 올릴 게 아니라 **PNG 를 더 큰 걸로 갈아야 한다.**
+
+       1.08 인 이유는 크게 하려는 게 아니라 **되돌리려는** 것이다. login_hero 는
+       앞 자산보다 종횡비가 좁고(0.745→0.667) 내용이 프레임을 덜 채운다(93%→86%).
+       그래서 같은 height:280px 에서 실효 크기가 8% 작아졌다 — 1.08 은 그 8% 를
+       메워 눈으로 합의한 크기로 되돌리는 값이다. 자산을 갈면 다시 계산할 것:
+           zoom = (이전 내용충전율 0.933) / (새 자산 내용충전율)
+       높이만 키우면 접지 그림자·렌즈 빛·문서 두 장이 전부 280px 기준에 남아
+       따로 논다. zoom 이면 그 넷을 한 숫자로 함께 끌고 간다(좁은 화면에서
+       .46 으로 줄이는 것과 같은 수법이다). */
+    .login-brand .hero-stage { zoom: 1.08; }
+
+    /* 로그인 split 모달: 좁은 화면에서 세로로 쌓기 */
+    @media (max-width: 760px) {
+      .auth-canvas { align-items: flex-start !important; overflow-y: auto !important; }
+      .login-modal { flex-direction: column; min-height: 0; max-width: 420px;
+                     margin: 0 auto; flex: none; }
+      .login-brand, .login-form { width: 100%; box-sizing: border-box; }
+      .login-brand { padding: 32px 28px; }
+      /* 히어로는 통째로 줄인다. 마스코트 높이만 줄이면 접지 그림자·빛은 280px
+         기준 그대로 남아 발밑을 벗어난다 — 비율을 손으로 다시 맞추지 않도록
+         zoom 으로 함께 줄인다(앱 아트보드와 같은 수법). 여백도 zoom 을 타므로
+         실제 16px 을 얻으려면 그만큼 키워 적는다. */
+      .login-brand .hero-stage { zoom: .46; margin-bottom: 36px; }
+      /* 문서 면은 뺀다 — 이 폭에서는 잘린 조각만 보여 얼룩이 된다. */
+      .bp-doc { display: none; }
+      .login-brand .brand-wordmark { font-size: 40px; }
+      .login-form-title { font-size: 22px; }
+      .login-form { padding: 32px 28px; }
+    }
+  </style>
+  <!-- 테마는 첫 페인트 전에 걸어야 한다. app.js 가 걸면 이미 라이트로 한 번
+       칠해진 뒤라 다크 사용자에게 흰 화면이 번쩍인다. 저장값이 없으면 OS 설정. -->
+  <script>
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem("dr_theme"); } catch (e) { /* 사생활 보호 모드 */ }
+      if (t !== "dark" && t !== "light") {
+        t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark" : "light";
+      }
+      document.documentElement.setAttribute("data-theme", t);
+    })();
+  </script>
+  <script src="docreview-data.js"></script>
+  <!-- `docreview compare|review --emit-ui ...`로 생성. 없으면 위 목업을 쓴다. -->
+  <script src="docreview-result.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <!-- app.js가 window.DR에서 재바인딩하므로 반드시 먼저 로드한다 -->
+  <script src="icons.js?v=20260812-mascot-palette"></script>
+  <script src="pdfgeom.js"></script>
+  <script src="helpers.js"></script>
+  <script src="api.js?v=20260814-nchip-hover"></script>
+  <script src="views.js?v=20260814-nchip-hover"></script>
+  <script src="pdfview.js"></script>
+  <script src="app.js?v=20260814-nchip-hover"></script>
+</body>
+</html>

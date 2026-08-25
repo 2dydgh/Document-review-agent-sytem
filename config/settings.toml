@@ -1,0 +1,51 @@
+# 기본 설정. `docsuree review|compare|serve` 가 --settings 없이 이 파일을 읽는다.
+#
+# 주소·이름은 환경변수가 이 파일을 덮는다 — 서버는 옮겨다니고 배포마다 다르다.
+#   LLM_QWEN_URL     문서 검사용 (base_url)
+#   LLM_OCR_URL      그림 해석용 (vlm_base_url)
+#   LLM_QWEN_LABEL   화면 표시용 이름 (model_label)
+
+[llm]
+# echo    빈 응답. LLM 지적이 0건이 된다 — 지어내지 않는다
+# local   OpenAI 호환 /v1/chat/completions (vLLM · 사내 게이트웨이 · Ollama)
+# claude  외부 Anthropic API. 사내 문서에는 쓰지 말 것 — 문서가 밖으로 나간다
+#
+# local 이 기본이다. echo 로 두면 결과가 조용히 룰 검사만 남는다
+# (실측: echo 6건 → Qwen 64건. 대가는 시간이다 — 0.17초 → 73.6초).
+# 빠르게만 보려면 화면에서 "규칙만"을 고른다.
+provider = "local"
+
+# LLM 서버. 창구가 둘이고, GPU 배치가 달라 따로 떠 있다.
+#   qwen  Qwen3.6-27B (L40S x2, tensor parallel)  — 문서 검사
+#   ocr   Qwen3-VL-8B-Instruct (L40S x1)          — 그림 해석
+#
+# **주소는 이 파일에 적지 않는다.** 배포마다 다르고, 저장소에 담을 것이 아니다.
+# 환경변수로 준다 — 저장소 루트의 `.env`(gitignore) 를 `source` 하면 된다:
+#
+#   export LLM_QWEN_URL=http://<서버>:9001/v1   # 문서 검사
+#   export LLM_OCR_URL=http://<서버>:9002/v1    # 그림 해석 (선택)
+#
+# **localhost 로 두지 않는다.** GPU 기계에서 일하는 사람에게만 닿는다.
+# LAN 주소는 그 기계에서도 그대로 닿으므로 모두에게 동작한다.
+base_url     = ""
+vlm_base_url = ""  # 비우면 그림 해석을 하지 않는다
+
+# 서버가 --served-model-name 으로 고정한 별칭. 전체 이름("Qwen/Qwen3.6-27B")을
+# 보내면 서버가 그런 모델을 모른다고 답한다.
+model     = "Qwen/Qwen3.6-27B"
+vlm_model = "ocr"
+model_label = "Qwen3.6-27B"  # 화면에 보여줄 이름. 서버 모델을 바꾸면 같이 고칠 것
+
+timeout     = 120
+thinking    = false  # 사고 ON 76.8초 → OFF 1.1초. 판정 정확도는 그대로였다
+max_tokens  = 1024
+concurrency = 8      # vLLM 은 배치 처리라 하나씩 보내면 GPU 가 논다(실측 8.7배).
+                     # **동시 검토자 수만큼 곱해진다** — 서버 여력에 맞출 것
+rescue_max  = 10     # 인용 대조 실패 후보를 버리기 전 재질의할 상한(검사기당).
+                     # 후보당 최대 2회 호출. 0 이면 끈다(즉시 폐기).
+
+# 사내 vLLM 게이트웨이로 되돌릴 때: LLM_QWEN_URL 을 그쪽으로,
+# model = "Qwen/Qwen3.6-27B", vlm_base_url = "" (그쪽은 VLM 이 따로 없다).
+
+[chunking]
+max_chars = 4000

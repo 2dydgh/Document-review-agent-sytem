@@ -1,0 +1,109 @@
+[project]
+name = "docsuree"
+version = "0.1.0"
+description = "문서 검증 AI 에이전트 플랫폼 (PoC)"
+requires-python = ">=3.11"
+dependencies = [
+    "pypdf>=6.14.2",
+    "pdfplumber>=0.11.10",
+    "pyyaml>=6.0",
+    # 구형 .hwp(OLE 바이너리) 네이티브 파싱. Rust 파서의 PyO3 바인딩으로,
+    # .hwp를 .hwpx로 바꿔주면 그 다음은 hwpx.py가 처리한다(ingestion/hwp.py 참고).
+    # 주의: 0.8.1 linux 휠은 낡은 freetype을 번들해 import가 깨진다 — README 설치 절 참고.
+    "rhwp-python>=0.8.1",
+]
+
+[project.optional-dependencies]
+# 로컬 웹 UI 서버(`docsuree serve`). 엔진/CLI만 쓸 때는 필요 없다.
+#
+# pdfplumber는 여기 없다 — core로 올렸다. 예전에는 "원본 PDF에 형광펜을 얹는
+# 기능에만 쓰고 검토 엔진에는 그 좌표가 필요 없다(줄 단위로 대조하므로)"는
+# 이유로 web extra에 뒀는데, 그 전제가 바뀌었다. 이제 엔진이 표 bbox로 쪽을
+# 밴드로 나누고 글자 좌표로 도면 라벨을 묶는다 — pypdf만으로는 표 한 행이
+# 3~5줄로 파열되고, 이 문서들은 표 안 글자가 54~88%다.
+# 대가는 CLI만 쓰는 사용자도 pillow·pypdfium2를 받는 것이다.
+#
+# 문서 변환(docx/hwpx→PDF, POST /api/render-pdf)에는 시스템 LibreOffice(soffice)가
+# 필요하다 — 파이썬 의존성이 아니다. 없으면 render-pdf가 501로 설치법을 안내하고,
+# 화면은 텍스트 미리보기로 폴백한다.
+web = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+    "fpdf2>=2.8.7",
+]
+
+# doc_parser 모듈 의존성 — 백엔드를 호출 시점에 import 하므로 쓰는 포맷의 것만 깔면 된다.
+#   uv sync --extra doc_parser            (PDF/DOCX/HWPX/HWP5 전부)
+#   uv sync --extra doc_parser_ocr        (+ 스캔 OCR·표 구조 복원)
+# HWPML(.hwp 중 평문 XML)은 표준 라이브러리만 쓰므로 추가 설치가 필요 없다.
+#
+# 상한을 반드시 건다 — 상한 없이 두었다가 python-hwpx 가 5.1.1 에서 5.8.0 으로 올라가
+# HWPX 각주 구조가 바뀐 걸 뒤늦게 발견한 이력이 있다(2026-08-06).
+doc_parser = [
+    "pdf-inspector>=0.2.5,<0.3",   # PDF 페이지 분류·마크다운 추출
+    "pymupdf>=1.26,<2",            # PDF 정규화 prestep·텍스트 엔진 폴백
+    "python-docx>=1.1,<2",         # DOCX
+    "python-hwpx>=5.1.1,<6",       # HWPX(OWPML)
+    "olefile>=0.47,<1",            # HWP5(OLE2)
+]
+# 로컬 GPU 실행용 — **레거시**. 기본 경로는 서버(llm_client 가 사내 vLLM 호출)다.
+# 주의: 아래는 PyPI 기본 인덱스라 CPU 빌드가 깔린다. CUDA 빌드(torch+cu126,
+# paddlepaddle-gpu)는 별도 인덱스가 필요하고 그 구성은 저장소에 없다 —
+# local(작업용)/gpu-legacy/pyproject.toml 에 실측 근거 주석과 함께 보존돼 있다.
+doc_parser_ocr = [
+    "paddleocr>=3.7.0,<3.8",       # 스캔 페이지·이미지 OCR
+    "paddlepaddle>=3.3,<4",        # paddleocr 의 연산 백엔드 — 없으면 import paddle 이
+                                   # 실패한다. GPU 는 paddlepaddle-gpu 인데 PyPI 에 없어
+                                   # 별도 인덱스가 필요하다(gpu-legacy 참조)
+    "docling>=2.115.0,<3",         # 표/그림/수식/코드 구조 복원
+    "numpy>=2,<3",
+    "pillow>=11,<13",
+]
+
+[tool.pytest.ini_options]
+# 실문서(data/, 905쪽)를 읽는 테스트는 2~3분 걸린다. 기본으로는 돌린다 —
+# 이게 파싱을 실제로 검증하는 유일한 관문이라 빼두면 조용히 썩는다.
+# 빠른 루프에서는 `pytest -m "not slow"` 로 뺀다.
+#
+# 모듈식 이관: src/ 를 path에 올려 `modules.*`·`app.*` 를 import 가능하게 한다.
+# 테스트는 최상위 tests/(교차·실문서 통합) + src/modules/<name>/tests/(모듈 단위) 둘 다.
+pythonpath = ["src"]
+testpaths = ["src", "tests"]
+markers = [
+    "slow: 실문서를 읽어 오래 걸린다 (data/ 없으면 어차피 skip)",
+]
+
+[project.scripts]
+docsuree = "app.cli:main"
+
+[dependency-groups]
+# matplotlib 은 doc_parser 의 더미 테스트셋 생성기(generate_testset._formula_png)만 쓴다 —
+# 실문서 파싱에는 불필요해서 doc_parser extra 가 아니라 검증 도구 쪽에 둔다.
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "ruff>=0.16.1",
+    "matplotlib>=3.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# 모듈식 구조: 조립(app) + 독립 모듈(modules).
+packages = ["src/app", "src/modules"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# HWPML 합성 픽스처가 삼중따옴표 문자열 안의 XML 이라, 줄을 접으면 그게 곧 테스트
+# 데이터 변경이 된다. 문자열 내부라 `# noqa` 도 못 붙인다(주석이 XML 내용이 돼버림).
+# 코드가 아니라 데이터라서 줄길이 규칙만 이 파일에서 뺀다 — 나머지 규칙은 그대로 적용.
+"src/modules/doc_parser/tests/test_hwpml_backend.py" = ["E501"]
