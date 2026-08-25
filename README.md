@@ -18,7 +18,7 @@
 
 <br />
 
-<img src="docs/assets/home.png" width="100%" alt="DocSuree home dashboard" />
+<img src="web/public/screenshots/home.png" width="100%" alt="DocSuree home dashboard" />
 
 <div align="center">
   <sub>단일 문서 · 문서 비교 · 폴더 검토와 검토 기준을 한 화면에서 관리합니다.</sub>
@@ -67,7 +67,7 @@
 
 ## 실제 검토 화면
 
-<img src="docs/assets/review-screen.png" width="100%" alt="DocSuree review result with PDF highlights and findings" />
+<img src="web/public/screenshots/review-screen.png" width="100%" alt="DocSuree review result with PDF highlights and findings" />
 
 검토 결과 화면에서 원문 하이라이트와 지적사항을 함께 확인할 수 있습니다.
 사용자는 각 지적을 판정하고, 수정본을 올려 반영 여부를 다시 검토할 수 있습니다.
@@ -91,7 +91,7 @@
 
 ## 검토 흐름
 
-<img src="docs/assets/upload.png" width="100%" alt="DocSuree document upload and AI analysis pipeline" />
+<img src="web/public/screenshots/upload.png" width="100%" alt="DocSuree document upload and AI analysis pipeline" />
 
 문서를 첨부하고 적용할 검토 기준을 선택하면, 화면 오른쪽에서
 `Ingestion → Normalize → Chunking → Review → Report` 파이프라인을 확인할 수 있습니다.
@@ -279,7 +279,7 @@ DocReview/
 │   ├── public/             # 런타임 정적 자산
 │   ├── brand/source/       # 브랜드 원본
 │   └── vendor/             # pdf.js
-├── docs/assets/            # README 스크린샷
+├── web/public/screenshots/            # README 스크린샷
 ├── presets/                # 공통 · 팀별 검토 기준
 ├── golden/                 # 정답 재검증 셋
 ├── tests/
